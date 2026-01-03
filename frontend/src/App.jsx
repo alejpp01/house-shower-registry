@@ -1,804 +1,444 @@
-import { useState, useEffect } from 'react'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+import { useState, useEffect } from 'react';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 function HouseShowerApp() {
-  const [view, setView] = useState('public')
-  const [guestName, setGuestName] = useState(() => localStorage.getItem('guestName') || '')
-  const [guestToken, setGuestToken] = useState(() => localStorage.getItem('guestToken') || '')
-  const [gifts, setGifts] = useState([])
-  const [reservations, setReservations] = useState({})
-  const [adminPassword, setAdminPassword] = useState('')
-  const [isAdminAuth, setIsAdminAuth] = useState(() => localStorage.getItem('isAdminAuth') === 'true')
-  const [adminTab, setAdminTab] = useState('add')
-  const [alerts, setAlerts] = useState([])
-  const [selectedGift, setSelectedGift] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [view, setView] = useState('public');
+  const [guestName, setGuestName] = useState(localStorage.getItem('guestName') || '');
+  const [guestToken, setGuestToken] = useState(localStorage.getItem('guestToken') || '');
+  const [gifts, setGifts] = useState([]);
+  const [reservations, setReservations] = useState([]);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [isAdminAuth, setIsAdminAuth] = useState(localStorage.getItem('isAdminAuth') === 'true');
+  const [adminTab, setAdminTab] = useState('add');
+  const [newGift, setNewGift] = useState({ name: '', image: '', category: '', details: '', buyUrl: '', price: '', isVip: false });
+  const [releaseConfirm, setReleaseConfirm] = useState(null);
 
-  // Cargar regalos y reservaciones al iniciar
   useEffect(() => {
-    fetchGiftsAndReservations()
-  }, [])
+    fetchGifts();
+    fetchReservations();
+  }, []);
 
-  const fetchGiftsAndReservations = async () => {
+  const fetchGifts = async () => {
     try {
-      setLoading(true)
-      const [giftsRes, reservationsRes] = await Promise.all([
-        fetch(`${API_URL}/api/gifts`),
-        fetch(`${API_URL}/api/reservations`)
-      ])
+      const res = await fetch(`${API_URL}/api/gifts`);
+      const data = await res.json();
+      setGifts(data);
+    } catch (e) { console.error(e); }
+  };
 
-      if (giftsRes.ok && reservationsRes.ok) {
-        const giftsData = await giftsRes.json()
-        const reservationsData = await reservationsRes.json()
-        setGifts(giftsData)
-        setReservations(reservationsData)
-      }
-    } catch (error) {
-      console.error('Error al cargar datos:', error)
-      showAlert('Error al conectar con el servidor', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const showAlert = (message, type = 'success') => {
-    const id = Date.now()
-    setAlerts(prev => [...prev, { id, message, type }])
-    setTimeout(() => setAlerts(prev => prev.filter(a => a.id !== id)), 3000)
-  }
-
-  const handlePublicView = () => {
-    if (!guestName.trim()) {
-      showAlert('Por favor ingresa tu nombre', 'error')
-      return
-    }
-    setView('public')
-  }
-
-  const handleAdminAuth = () => {
-    if (adminPassword === 'juanchoesgey') {
-      setIsAdminAuth(true)
-      localStorage.setItem('isAdminAuth', 'true')
-      setAdminPassword('')
-      showAlert('¡Acceso de admin confirmado!')
-    } else {
-      showAlert('Clave secreta incorrecta', 'error')
-    }
-  }
-
-  const handleLogoutAdmin = () => {
-    setIsAdminAuth(false)
-    localStorage.removeItem('isAdminAuth')
-    setAdminPassword('')
-    setView('public')
-    showAlert('Sesión cerrada')
-  }
-
-  const handleGuestNameChange = (name) => {
-    setGuestName(name)
-    localStorage.setItem('guestName', name)
-    if (!guestToken && name.trim()) {
-      const token = Math.random().toString(36).substr(2, 9)
-      setGuestToken(token)
-      localStorage.setItem('guestToken', token)
-    }
-  }
-
-  const addGift = async (newGift) => {
+  const fetchReservations = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/gifts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newGift)
+      const res = await fetch(`${API_URL}/api/reservations`);
+      const data = await res.json();
+      setReservations(data);
+    } catch (e) { console.error(e); }
+  };
+
+  const saveGuest = () => {
+    if (!guestName.trim()) return;
+    const token = Math.random().toString(36).substr(2) + Date.now().toString(36);
+    localStorage.setItem('guestName', guestName);
+    localStorage.setItem('guestToken', token);
+    setGuestToken(token);
+  };
+
+  const reserveGift = async (giftId) => {
+    await fetch(`${API_URL}/api/reservations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ giftId, selectedBy: guestName, token: guestToken })
+    });
+    fetchGifts();
+    fetchReservations();
+  };
+
+  const releaseGift = async (giftId) => {
+    await fetch(`${API_URL}/api/reservations/${giftId}`, { method: 'DELETE' });
+    fetchReservations();
+    setReleaseConfirm(null);
+  };
+
+  const addGift = async () => {
+    if (!newGift.name.trim()) return;
+    await fetch(`${API_URL}/api/gifts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...newGift,
+        isVip: newGift.isVip ? 1 : 0
       })
+    });
+    setNewGift({ name: '', image: '', category: '', details: '', buyUrl: '', price: '', isVip: false });
+    fetchGifts();
+  };
 
-      if (res.ok) {
-        const addedGift = await res.json()
-        setGifts(prev => [addedGift, ...prev])
-        showAlert('¡Regalo agregado!')
-      }
-    } catch (error) {
-      console.error('Error:', error)
-      showAlert('Error al agregar regalo', 'error')
-    }
-  }
+  const deleteGift = async (id) => {
+    await fetch(`${API_URL}/api/gifts/${id}`, { method: 'DELETE' });
+    fetchGifts();
+  };
 
-  const updateGift = async (id, updated) => {
+  const toggleGiftVip = async (id, currentVipStatus) => {
     try {
+      const gift = gifts.find(g => g.id === id);
       const res = await fetch(`${API_URL}/api/gifts/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated)
-      })
-
-      if (res.ok) {
-        setGifts(prev => prev.map(g => g.id === id ? { ...g, ...updated } : g))
-        showAlert('¡Regalo actualizado!')
-      }
-    } catch (error) {
-      console.error('Error:', error)
-      showAlert('Error al actualizar regalo', 'error')
-    }
-  }
-
-  const deleteGift = async (id) => {
-    try {
-      const res = await fetch(`${API_URL}/api/gifts/${id}`, { method: 'DELETE' })
-
-      if (res.ok) {
-        setGifts(prev => prev.filter(g => g.id !== id))
-        const newRes = { ...reservations }
-        delete newRes[id]
-        setReservations(newRes)
-        showAlert('¡Regalo eliminado!')
-      }
-    } catch (error) {
-      console.error('Error:', error)
-      showAlert('Error al eliminar regalo', 'error')
-    }
-  }
-
-  const reserveGift = async (giftId) => {
-    try {
-      const res = await fetch(`${API_URL}/api/reservations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          giftId: parseInt(giftId),
-          selectedBy: guestName,
-          token: guestToken
+          ...gift,
+          isVip: currentVipStatus ? 0 : 1
         })
-      })
-
-      if (res.ok) {
-        setReservations(prev => ({
-          ...prev,
-          [giftId]: { selectedBy: guestName, token: guestToken, timestamp: Date.now() }
-        }))
-        showAlert(`¡${guestName}, has seleccionado un regalo!`)
-      } else {
-        showAlert('Este regalo ya fue seleccionado', 'error')
-      }
+      });
+      const updated = await res.json();
+      setGifts(gifts.map(g => g.id === id ? updated : g));
     } catch (error) {
-      console.error('Error:', error)
-      showAlert('Error al reservar regalo', 'error')
+      console.error('Error toggling VIP:', error);
     }
-  }
+  };
 
-  const releaseGift = async (giftId, token) => {
-    try {
-      if (reservations[giftId]?.token !== token) {
-        showAlert('No puedes liberar este regalo', 'error')
-        return
-      }
+  const isReserved = (giftId) => reservations.some(r => r.giftId == giftId);
+  const vipGifts = gifts.filter(g => g.isVip === 1 || g.isVip === true);
 
-      const res = await fetch(`${API_URL}/api/reservations/${giftId}`, { method: 'DELETE' })
-
-      if (res.ok) {
-        const newRes = { ...reservations }
-        delete newRes[giftId]
-        setReservations(newRes)
-        showAlert('¡Regalo liberado correctamente!')
-      }
-    } catch (error) {
-      console.error('Error:', error)
-      showAlert('Error al liberar regalo', 'error')
-    }
-  }
-
-  if (loading) {
+  // VISTA VIP
+  if (view === 'vip' && guestName) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando...</p>
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-black to-gray-900 py-20 px-4 text-white">
+        <nav className="max-w-6xl mx-auto flex justify-between items-center mb-16">
+          <button onClick={() => setView('public')} className="text-amber-400 hover:text-amber-300 font-serif text-xl">← Regalos Normales</button>
+          <h1 className="text-4xl font-serif text-amber-400 drop-shadow-2xl">House Shower VIP</h1>
+        </nav>
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-5xl font-serif text-amber-400 text-center mb-20 drop-shadow-2xl">Zona Exclusiva Premium</h2>
+          {vipGifts.length === 0 ? (
+            <p className="text-center text-slate-400 text-xl">No hay regalos en zona VIP. ¡Márcalos desde el Admin! 👑</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+              {vipGifts.map(gift => (
+                <div key={gift.id} className="bg-slate-800/50 backdrop-blur-sm border border-amber-500/40 rounded-3xl p-8 shadow-2xl hover:shadow-amber-500/50 hover:-translate-y-3 transition-all duration-500">
+                  <img src={gift.image} alt={gift.name} className="w-full h-64 object-cover rounded-2xl mb-6 shadow-2xl" />
+                  <div className="text-right mb-4">
+                    <span className="bg-amber-500/20 text-amber-400 border border-amber-500/40 px-4 py-2 rounded-full text-lg font-serif font-semibold">
+                      👑 Premium
+                    </span>
+                  </div>
+                  <h3 className="text-2xl font-serif text-white mb-4">{gift.name}</h3>
+                  <p className="text-slate-300 font-light mb-6 leading-relaxed">{gift.details}</p>
+                  {isReserved(gift.id) ? (
+                    <button onClick={() => setReleaseConfirm(gift.id)} className="w-full bg-slate-700/50 hover:bg-slate-600 border border-slate-500/50 text-slate-300 py-4 px-6 rounded-2xl font-serif font-semibold transition-all">
+                      Liberar Reserva
+                    </button>
+                  ) : (
+                    <button onClick={() => reserveGift(gift.id)} className="w-full bg-gradient-to-r from-amber-500 to-yellow-600 text-black font-serif font-bold py-4 px-6 rounded-2xl shadow-xl hover:shadow-amber-500/50 hover:scale-105 transition-all duration-300">
+                      Reservar Exclusivo ✨
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+        {releaseConfirm && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-slate-900 border border-amber-500/40 p-8 rounded-3xl max-w-md w-full mx-4 shadow-2xl">
+              <h3 className="text-2xl font-serif text-amber-400 mb-4">Confirmar Liberación</h3>
+              <p className="text-slate-300 mb-6">¿Liberar "{gifts.find(g => g.id == releaseConfirm)?.name}"?</p>
+              <div className="flex gap-4">
+                <button onClick={() => releaseGift(releaseConfirm)} className="flex-1 bg-amber-500 hover:bg-amber-600 text-black font-serif py-3 px-6 rounded-xl font-bold transition-all">
+                  Sí, Liberar
+                </button>
+                <button onClick={() => setReleaseConfirm(null)} className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-300 font-serif py-3 px-6 rounded-xl transition-all">
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-    )
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* NAVBAR */}
-      <nav className="bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <h1 className="text-2xl font-bold">🏠 Chocoro Shower</h1>
-            <div className="flex gap-3">
-              <button
-                onClick={() => handlePublicView()}
-                className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
-                  view === 'public'
-                    ? 'bg-white text-teal-600'
-                    : 'bg-teal-500 hover:bg-teal-600 text-white'
-                }`}
-              >
-                Ver Regalos
-              </button>
-              <button
-                onClick={() => {
-                  if (!isAdminAuth) {
-                    setView('admin')
-                  } else {
-                    setView('admin')
-                    setAdminTab('add')
-                  }
-                }}
-                className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
-                  view === 'admin'
-                    ? 'bg-white text-teal-600'
-                    : 'bg-teal-500 hover:bg-teal-600 text-white'
-                }`}
-              >
-                Panel Admin
-              </button>
-              {isAdminAuth && (
-                <button
-                  onClick={handleLogoutAdmin}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-semibold text-white transition-colors"
-                >
-                  Salir
-                </button>
-              )}
-            </div>
+      <nav className="bg-white/80 backdrop-blur-md shadow-lg border-b">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            🎁 House Shower Registry
+          </h1>
+          <div className="flex gap-4 items-center">
+            {guestName && (
+              <span className="text-sm bg-green-100 text-green-800 px-3 py-1 rounded-full font-medium">
+                👋 {guestName}
+              </span>
+            )}
+            <button
+              onClick={() => setView(view === 'vip' && guestName ? 'public' : 'vip')}
+              disabled={!guestName}
+              className="bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-black font-bold py-2 px-6 rounded-xl shadow-lg hover:shadow-amber-500/50 transition-all duration-300 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              ✨ Zona VIP
+            </button>
+            <button
+              onClick={() => setView(isAdminAuth ? 'admin' : 'admin-login')}
+              className="bg-gradient-to-r from-gray-800 to-gray-900 hover:from-gray-700 hover:to-gray-800 text-white font-bold py-2 px-6 rounded-xl shadow-lg hover:shadow-gray-500/50 transition-all"
+            >
+              🔐 Admin
+            </button>
           </div>
         </div>
       </nav>
 
-      {/* ALERTS */}
-      <div className="fixed top-4 right-4 z-40 space-y-2">
-        {alerts.map(alert => (
-          <div
-            key={alert.id}
-            className={`alert px-4 py-3 rounded-lg text-white font-semibold shadow-lg ${
-              alert.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-            }`}
-          >
-            {alert.message}
-          </div>
-        ))}
-      </div>
-
-      {/* MAIN CONTENT */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {view === 'public' ? (
-          <PublicView
-            guestName={guestName}
-            onGuestNameChange={handleGuestNameChange}
-            gifts={gifts}
-            reservations={reservations}
-            onReserve={reserveGift}
-            onRelease={releaseGift}
-            selectedGift={selectedGift}
-            onSelectGift={setSelectedGift}
-            showAlert={showAlert}
-          />
-        ) : isAdminAuth ? (
-          <AdminView
-            gifts={gifts}
-            reservations={reservations}
-            adminTab={adminTab}
-            onTabChange={setAdminTab}
-            onAddGift={addGift}
-            onEditGift={updateGift}
-            onDeleteGift={deleteGift}
-          />
-        ) : (
-          <AdminLoginView
-            onAuth={handleAdminAuth}
-            password={adminPassword}
-            onPasswordChange={setAdminPassword}
-          />
-        )}
-      </div>
-    </div>
-  )
-}
-
-function PublicView({ guestName, onGuestNameChange, gifts, reservations, onReserve, onRelease, selectedGift, onSelectGift, showAlert }) {
-  const [releaseGiftId, setReleaseGiftId] = useState(null)
-  const [releaseConfirmName, setReleaseConfirmName] = useState('')
-
-  const handleReleaseConfirm = (giftId) => {
-    const guestToken = localStorage.getItem('guestToken')
-    if (releaseConfirmName.trim() === guestName.trim()) {
-      onRelease(giftId, guestToken)
-      setReleaseGiftId(null)
-      setReleaseConfirmName('')
-    } else {
-      showAlert('El nombre no coincide', 'error')
-    }
-  }
-
-  return (
-    <div>
-      <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-        <h2 className="text-2xl font-bold text-teal-600 mb-4">Selecciona los Regalos que Deseas</h2>
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-2">Tu Nombre *</label>
+      {/* FORM INVITADO */}
+      {!guestName && view === 'public' && (
+        <div className="max-w-md mx-auto mt-32 p-12 bg-white rounded-3xl shadow-2xl border border-gray-200">
+          <h2 className="text-4xl font-bold mb-8 text-gray-800">¡Bienvenido al House Shower!</h2>
+          <p className="text-gray-600 mb-8 text-lg">Ingresa tu nombre para ver y reservar regalos</p>
           <input
-            type="text"
             value={guestName}
-            onChange={(e) => onGuestNameChange(e.target.value)}
-            placeholder="Ingresa tu nombre completo"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+            onChange={(e) => setGuestName(e.target.value)}
+            className="w-full p-6 border-2 border-gray-200 rounded-3xl text-2xl mb-8 text-center focus:ring-4 focus:ring-blue-200 focus:border-blue-500 transition-all shadow-lg"
+            placeholder="Tu nombre completo"
           />
-          <p className="text-xs text-gray-500 mt-2">
-            ✓ Con tu nombre podrás seleccionar y liberar tus propios regalos
-          </p>
-        </div>
-      </div>
-
-      {guestName.trim() && gifts.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {gifts.map(gift => {
-            const isReserved = !!reservations[gift.id]
-            const reservedByMe = reservations[gift.id]?.selectedBy === guestName
-
-            return (
-              <div
-                key={gift.id}
-                className={`bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col ${isReserved ? 'opacity-75 bg-gray-50' : ''}`}
-              >
-                {gift.image ? (
-                  <img
-                    src={gift.image}
-                    alt={gift.name}
-                    className="w-full h-48 object-cover"
-                    onError={(e) => {
-                      e.target.style.display = 'none'
-                    }}
-                  />
-                ) : (
-                  <div className="w-full h-48 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400">📦</div>
-                )}
-
-                <div className="flex-grow p-4">
-                  <h3 className={`text-lg font-bold ${isReserved ? 'line-through text-gray-600' : 'text-teal-600'}`}>
-                    {gift.name}
-                    {isReserved && <span className="inline-block bg-red-100 text-red-800 text-xs font-semibold px-3 py-1 rounded-full ml-2">Reservado</span>}
-                  </h3>
-                  {gift.category && (
-                    <p className="text-sm text-gray-600 mt-2">
-                      <strong>Categoría:</strong> {gift.category}
-                    </p>
-                  )}
-                  {gift.details && (
-                    <p className="text-sm text-gray-600 mt-2">{gift.details}</p>
-                  )}
-                  {reservedByMe && (
-                    <p className="text-xs text-green-600 mt-2 font-semibold">
-                      ✓ Tú lo seleccionaste
-                    </p>
-                  )}
-                </div>
-
-                <div className="p-4 bg-gray-50 flex gap-2">
-                  {!isReserved && (
-                    <button
-                      onClick={() => {
-                        if (!guestName.trim()) {
-                          showAlert('Por favor ingresa tu nombre', 'error')
-                          return
-                        }
-                        onSelectGift(gift)
-                      }}
-                      className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors flex-1"
-                    >
-                      Seleccionar
-                    </button>
-                  )}
-                  {reservedByMe && (
-                    <button
-                      onClick={() => setReleaseGiftId(gift.id)}
-                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-colors flex-1"
-                    >
-                      Liberar
-                    </button>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      ) : guestName.trim() && gifts.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-xl text-gray-500">No hay regalos disponibles aún</p>
-        </div>
-      ) : (
-        <div className="text-center py-12">
-          <p className="text-xl text-gray-500">Ingresa tu nombre para ver los regalos</p>
-        </div>
-      )}
-
-      {selectedGift && (
-        <GiftModal
-          gift={selectedGift}
-          onClose={() => onSelectGift(null)}
-          onConfirm={() => {
-            onReserve(selectedGift.id)
-            onSelectGift(null)
-          }}
-        />
-      )}
-
-      {releaseGiftId && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => { setReleaseGiftId(null); setReleaseConfirmName('') }}>
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <button
-              onClick={() => { setReleaseGiftId(null); setReleaseConfirmName('') }}
-              className="float-right text-2xl font-bold text-gray-400 hover:text-gray-600 leading-none p-4"
-            >
-              ×
-            </button>
-            <div className="p-6 pt-2">
-              <h3 className="text-xl font-bold text-red-600 mb-4">⚠️ Liberar Regalo</h3>
-              <p className="text-gray-700 mb-4">
-                Para liberar este regalo, escribe tu nombre para confirmar:
-              </p>
-              <input
-                type="text"
-                value={releaseConfirmName}
-                onChange={(e) => setReleaseConfirmName(e.target.value)}
-                placeholder={`Escribe: ${guestName}`}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent mb-4"
-                autoFocus
-              />
-              <div className="flex gap-3">
-                <button
-                  onClick={() => { setReleaseGiftId(null); setReleaseConfirmName('') }}
-                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-semibold transition-colors flex-1"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => handleReleaseConfirm(releaseGiftId)}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-colors flex-1"
-                >
-                  Liberar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function AdminLoginView({ onAuth, password, onPasswordChange }) {
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    onAuth()
-  }
-
-  return (
-    <div className="max-w-md mx-auto">
-      <div className="bg-white rounded-lg shadow-lg p-8">
-        <h2 className="text-2xl font-bold text-teal-600 mb-6 text-center">Panel de Administrador</h2>
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Clave Secreta</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => onPasswordChange(e.target.value)}
-              placeholder="Ingresa la clave secreta"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              autoFocus
-            />
-          </div>
-          <button type="submit" className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-semibold transition-colors w-full">
-            Acceder
+          <button 
+            onClick={saveGuest} 
+            disabled={!guestName.trim()}
+            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-6 px-8 rounded-3xl font-bold text-xl shadow-2xl hover:shadow-blue-500/50 hover:scale-105 transition-all duration-300 disabled:opacity-50"
+          >
+            ✨ ¡Empezar a Reservar!
           </button>
-        </form>
-        <p className="text-xs text-gray-500 text-center mt-4">
-          Clave demo: juanchoesgey
-        </p>
-      </div>
-    </div>
-  )
-}
+        </div>
+      )}
 
-function AdminView({ gifts, reservations, adminTab, onTabChange, onAddGift, onEditGift, onDeleteGift }) {
-  const [formData, setFormData] = useState({ name: '', image: '', category: '', details: '', buyUrl: '' })
-  const [editingId, setEditingId] = useState(null)
-
-  const handleAddGift = () => {
-    if (!formData.name.trim() || !formData.image.trim()) {
-      alert('Nombre e imagen son obligatorios')
-      return
-    }
-    onAddGift(formData)
-    setFormData({ name: '', image: '', category: '', details: '', buyUrl: '' })
-  }
-
-  const handleEditGift = (id) => {
-    const gift = gifts.find(g => g.id === id)
-    setFormData(gift)
-    setEditingId(id)
-  }
-
-  const handleSaveEdit = () => {
-    onEditGift(editingId, formData)
-    setEditingId(null)
-    setFormData({ name: '', image: '', category: '', details: '', buyUrl: '' })
-  }
-
-  const handleCancel = () => {
-    setEditingId(null)
-    setFormData({ name: '', image: '', category: '', details: '', buyUrl: '' })
-  }
-
-  return (
-    <div>
-      {/* TABS */}
-      <div className="flex gap-6 border-b border-gray-200 mb-6">
-        <button
-          onClick={() => onTabChange('add')}
-          className={`px-4 py-2 font-semibold border-b-2 transition-colors ${adminTab === 'add' ? 'text-teal-600 border-teal-600' : 'text-gray-600 border-transparent hover:border-gray-300'}`}
-        >
-          ➕ Agregar Regalo
-        </button>
-        <button
-          onClick={() => onTabChange('manage')}
-          className={`px-4 py-2 font-semibold border-b-2 transition-colors ${adminTab === 'manage' ? 'text-teal-600 border-teal-600' : 'text-gray-600 border-transparent hover:border-gray-300'}`}
-        >
-          🎁 Gestionar
-        </button>
-        <button
-          onClick={() => onTabChange('analytics')}
-          className={`px-4 py-2 font-semibold border-b-2 transition-colors ${adminTab === 'analytics' ? 'text-teal-600 border-teal-600' : 'text-gray-600 border-transparent hover:border-gray-300'}`}
-        >
-          📊 Análisis
-        </button>
-      </div>
-
-      {/* TAB: ADD */}
-      {adminTab === 'add' && (
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-xl font-bold text-teal-600 mb-6">
-            {editingId ? 'Editar Regalo' : 'Agregar Nuevo Regalo'}
-          </h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-semibold mb-2">Nombre del Regalo *</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Ej: Almohada de lujo"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold mb-2">URL de Imagen *</label>
-              <input
-                type="text"
-                value={formData.image}
-                onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                placeholder="https://ejemplo.com/imagen.jpg"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold mb-2">Categoría</label>
-                <input
-                  type="text"
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  placeholder="Ej: Dormitorio"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold mb-2">Link de Compra</label>
-                <input
-                  type="text"
-                  value={formData.buyUrl}
-                  onChange={(e) => setFormData({ ...formData, buyUrl: e.target.value })}
-                  placeholder="https://..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold mb-2">Detalles/Descripción</label>
-              <textarea
-                value={formData.details}
-                onChange={(e) => setFormData({ ...formData, details: e.target.value })}
-                placeholder="Describe el regalo en detalle..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-vertical min-h-24"
-              />
-            </div>
-            <div className="flex gap-3 pt-4">
-              {editingId ? (
-                <>
-                  <button onClick={handleSaveEdit} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors flex-1">
-                    Guardar Cambios
+      {/* REGALOS NORMALES */}
+      {guestName && view === 'public' && (
+        <div className="max-w-6xl mx-auto py-20 px-6">
+          <div className="text-center mb-20">
+            <h2 className="text-5xl font-bold mb-4 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+              Regalos Disponibles
+            </h2>
+            <p className="text-xl text-gray-600">¡Elige lo que más te guste! ✨</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {gifts.filter(g => !g.isVip && g.isVip !== 1).map(gift => (
+              <div key={gift.id} className="bg-white/70 backdrop-blur-sm rounded-3xl p-8 shadow-xl hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 border border-gray-200">
+                <img src={gift.image || 'https://via.placeholder.com/400x300?text=Regalo'} alt={gift.name} className="w-full h-64 object-cover rounded-2xl mb-6 shadow-lg" />
+                <h3 className="text-2xl font-bold mb-3 text-gray-800">{gift.name}</h3>
+                {gift.price && <div className="text-right mb-4"><span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-lg font-bold">${gift.price}</span></div>}
+                <p className="text-gray-600 mb-6 leading-relaxed">{gift.details}</p>
+                {isReserved(gift.id) ? (
+                  <button className="w-full bg-gray-200 text-gray-700 py-4 px-6 rounded-2xl font-bold text-lg shadow-md">✅ Reservado</button>
+                ) : (
+                  <button 
+                    onClick={() => reserveGift(gift.id)} 
+                    className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white py-4 px-6 rounded-2xl font-bold text-lg shadow-xl hover:shadow-blue-500/50 hover:scale-105 transition-all duration-300"
+                  >
+                    🎁 Reservar Ahora
                   </button>
-                  <button onClick={handleCancel} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-semibold transition-colors flex-1">
-                    Cancelar
-                  </button>
-                </>
-              ) : (
-                <button onClick={handleAddGift} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors w-full">
-                  Agregar Regalo
-                </button>
-              )}
-            </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* TAB: MANAGE */}
-      {adminTab === 'manage' && (
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-xl font-bold text-teal-600 mb-6">Gestionar Regalos</h3>
-          {gifts.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {gifts.map(gift => {
-                const isReserved = !!reservations[gift.id]
-                const reservedBy = reservations[gift.id]?.selectedBy
+      {/* LOGIN ADMIN */}
+      {view === 'admin-login' && (
+        <div className="max-w-md mx-auto mt-32 p-12 bg-white rounded-3xl shadow-2xl border">
+          <h2 className="text-4xl font-bold mb-8 text-gray-800 text-center">🔐 Panel Admin</h2>
+          <input
+            type="password"
+            placeholder="Contraseña admin"
+            value={adminPassword}
+            onChange={(e) => setAdminPassword(e.target.value)}
+            className="w-full p-6 border-2 border-gray-300 rounded-3xl text-xl mb-8 text-center focus:ring-4 focus:ring-indigo-200 focus:border-indigo-500 shadow-lg"
+          />
+          <button 
+            onClick={() => {
+              if (adminPassword === 'admin123') {
+                setIsAdminAuth(true);
+                localStorage.setItem('isAdminAuth', 'true');
+                setView('admin');
+              } else {
+                alert('Contraseña incorrecta');
+              }
+            }}
+            className="w-full bg-gradient-to-r from-gray-800 to-gray-900 text-white py-6 px-8 rounded-3xl font-bold text-xl shadow-2xl hover:shadow-gray-500/50 hover:scale-105 transition-all"
+          >
+            Entrar al Admin
+          </button>
+          <p className="text-xs text-gray-500 mt-4 text-center">Contraseña: admin123</p>
+        </div>
+      )}
 
-                return (
-                  <div key={gift.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col">
-                    {gift.image ? (
-                      <img src={gift.image} alt={gift.name} className="w-full h-48 object-cover" />
-                    ) : (
-                      <div className="w-full h-48 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400">📦</div>
-                    )}
-                    <div className="p-4 flex-grow">
-                      <h4 className="font-bold text-teal-600">
-                        {gift.name}
-                        {isReserved && <span className="inline-block bg-red-100 text-red-800 text-xs font-semibold px-3 py-1 rounded-full ml-2">✓ RESERVADO</span>}
-                      </h4>
-                      {gift.category && <p className="text-sm text-gray-600 mt-2">📂 {gift.category}</p>}
-                      {isReserved && (
-                        <p className="text-sm text-gray-700 mt-2 font-semibold">
-                          👤 Seleccionado por: <span className="text-teal-600">{reservedBy}</span>
-                        </p>
+      {/* PANEL ADMIN */}
+      {view === 'admin' && isAdminAuth && (
+        <div className="max-w-4xl mx-auto mt-12 p-12 bg-white/90 backdrop-blur-md rounded-3xl shadow-2xl border border-gray-200">
+          <div className="flex justify-between items-center mb-12">
+            <h2 className="text-4xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+              🎛️ Panel de Administración
+            </h2>
+            <button 
+              onClick={() => {
+                setIsAdminAuth(false);
+                localStorage.removeItem('isAdminAuth');
+                setView('public');
+              }}
+              className="bg-red-500 hover:bg-red-600 text-white px-8 py-3 rounded-2xl font-bold shadow-lg hover:shadow-red-500/50 transition-all"
+            >
+              Cerrar Sesión
+            </button>
+          </div>
+
+          {/* TABS */}
+          <div className="grid grid-cols-2 gap-4 mb-12">
+            <button 
+              onClick={() => setAdminTab('add')}
+              className={`p-6 rounded-2xl font-bold text-xl shadow-lg transition-all ${
+                adminTab === 'add' 
+                  ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-emerald-500/50 scale-105' 
+                  : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:scale-105'
+              }`}
+            >
+              ➕ Agregar Regalo
+            </button>
+            <button 
+              onClick={() => setAdminTab('list')}
+              className={`p-6 rounded-2xl font-bold text-xl shadow-lg transition-all ${
+                adminTab === 'list' 
+                  ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-blue-500/50 scale-105' 
+                  : 'bg-gray-100 hover:bg-gray-200 text-gray-800 hover:scale-105'
+              }`}
+            >
+              📋 Gestionar Regalos
+            </button>
+          </div>
+
+          {/* FORM AGREGAR */}
+          {adminTab === 'add' && (
+            <div className="space-y-6">
+              <input
+                type="text"
+                placeholder="Nombre del regalo *"
+                value={newGift.name}
+                onChange={(e) => setNewGift({...newGift, name: e.target.value})}
+                className="w-full p-6 border-2 border-gray-200 rounded-3xl text-xl focus:ring-4 focus:ring-emerald-200 focus:border-emerald-500 transition-all shadow-lg"
+              />
+              <input
+                type="url"
+                placeholder="URL imagen"
+                value={newGift.image}
+                onChange={(e) => setNewGift({...newGift, image: e.target.value})}
+                className="w-full p-6 border-2 border-gray-200 rounded-3xl focus:ring-4 focus:ring-emerald-200 focus:border-emerald-500"
+              />
+              <input
+                type="text"
+                placeholder="Categoría"
+                value={newGift.category}
+                onChange={(e) => setNewGift({...newGift, category: e.target.value})}
+                className="w-full p-6 border-2 border-gray-200 rounded-3xl focus:ring-4 focus:ring-emerald-200 focus:border-emerald-500"
+              />
+              <textarea
+                placeholder="Descripción"
+                value={newGift.details}
+                onChange={(e) => setNewGift({...newGift, details: e.target.value})}
+                rows="4"
+                className="w-full p-6 border-2 border-gray-200 rounded-3xl focus:ring-4 focus:ring-emerald-200 focus:border-emerald-500 resize-vertical"
+              />
+              <input
+                type="url"
+                placeholder="Link compra"
+                value={newGift.buyUrl}
+                onChange={(e) => setNewGift({...newGift, buyUrl: e.target.value})}
+                className="w-full p-6 border-2 border-gray-200 rounded-3xl focus:ring-4 focus:ring-emerald-200 focus:border-emerald-500"
+              />
+              <input
+                type="number"
+                placeholder="Precio ($)"
+                value={newGift.price}
+                onChange={(e) => setNewGift({...newGift, price: e.target.value})}
+                className="w-full p-6 border-2 border-gray-200 rounded-3xl focus:ring-4 focus:ring-emerald-200 focus:border-emerald-500"
+              />
+              
+              {/* CHECKBOX VIP */}
+              <div className="flex items-center gap-4 p-6 bg-amber-50 border-2 border-amber-300 rounded-3xl">
+                <input
+                  type="checkbox"
+                  id="isVip"
+                  checked={newGift.isVip}
+                  onChange={(e) => setNewGift({...newGift, isVip: e.target.checked})}
+                  className="w-6 h-6 cursor-pointer accent-amber-500"
+                />
+                <label htmlFor="isVip" className="cursor-pointer text-xl font-bold text-amber-900">
+                  👑 Mostrar en Zona VIP
+                </label>
+              </div>
+
+              <button
+                onClick={addGift}
+                disabled={!newGift.name.trim()}
+                className="w-full bg-gradient-to-r from-emerald-600 to-green-700 hover:from-emerald-500 hover:to-green-600 text-white py-8 px-12 rounded-3xl font-bold text-2xl shadow-2xl hover:shadow-emerald-500/50 hover:scale-105 transition-all duration-300 disabled:opacity-50"
+              >
+                🎁 ¡AGREGAR REGALO!
+              </button>
+            </div>
+          )}
+
+          {/* LISTA REGALOS */}
+          {adminTab === 'list' && (
+            <div className="space-y-4">
+              {gifts.map(gift => (
+                <div key={gift.id} className="flex items-center justify-between p-8 bg-gradient-to-r from-gray-50 to-gray-100 rounded-3xl hover:shadow-lg transition-all border border-gray-200">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-4 mb-2">
+                      <h4 className="text-2xl font-bold text-gray-800">{gift.name}</h4>
+                      {gift.isVip === 1 || gift.isVip === true ? (
+                        <span className="px-4 py-2 rounded-full text-lg font-bold bg-amber-100 text-amber-800">👑 VIP</span>
+                      ) : (
+                        <span className="px-4 py-2 rounded-full text-lg font-bold bg-blue-100 text-blue-800">📦 Normal</span>
                       )}
                     </div>
-                    <div className="p-4 bg-gray-50 flex gap-2">
-                      <button
-                        onClick={() => handleEditGift(gift.id)}
-                        className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-semibold transition-colors flex-1 text-sm"
-                      >
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm('¿Eliminar este regalo?')) {
-                            onDeleteGift(gift.id)
-                          }
-                        }}
-                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-colors flex-1 text-sm"
-                      >
-                        Eliminar
-                      </button>
-                    </div>
+                    <p className="text-gray-600">{gift.details}</p>
                   </div>
-                )
-              })}
+                  <div className="flex gap-4 ml-4">
+                    <button 
+                      onClick={() => toggleGiftVip(gift.id, gift.isVip)}
+                      className={`px-6 py-3 rounded-2xl font-bold shadow-lg transition-all whitespace-nowrap ${
+                        gift.isVip === 1 || gift.isVip === true
+                          ? 'bg-amber-500 hover:bg-amber-600 text-white hover:shadow-amber-500/50'
+                          : 'bg-gray-300 hover:bg-gray-400 text-gray-800'
+                      }`}
+                    >
+                      {gift.isVip === 1 || gift.isVip === true ? '👑 Quitar' : '➕ Marcar VIP'}
+                    </button>
+                    <button 
+                      onClick={() => deleteGift(gift.id)}
+                      className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:shadow-red-500/50 transition-all whitespace-nowrap"
+                    >
+                      🗑️ Eliminar
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-          ) : (
-            <p className="text-center text-gray-500 py-8">No hay regalos agregados aún</p>
           )}
         </div>
       )}
 
-      {/* TAB: ANALYTICS */}
-      {adminTab === 'analytics' && (
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-xl font-bold text-teal-600 mb-6">Análisis de Selecciones</h3>
-          {gifts.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 font-bold text-teal-600">Regalo</th>
-                    <th className="text-left py-3 px-4 font-bold text-teal-600">Categoría</th>
-                    <th className="text-left py-3 px-4 font-bold text-teal-600">Seleccionado Por</th>
-                    <th className="text-left py-3 px-4 font-bold text-teal-600">Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {gifts.map(gift => {
-                    const isReserved = !!reservations[gift.id]
-                    const reservedBy = reservations[gift.id]?.selectedBy || '-'
-
-                    return (
-                      <tr key={gift.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-3 px-4 font-semibold">{gift.name}</td>
-                        <td className="py-3 px-4">{gift.category || '-'}</td>
-                        <td className="py-3 px-4">
-                          {isReserved ? (
-                            <span className="font-semibold text-teal-600">{reservedBy}</span>
-                          ) : (
-                            <span className="text-gray-500">-</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4">
-                          <span
-                            className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
-                              isReserved
-                                ? 'bg-red-100 text-red-800'
-                                : 'bg-green-100 text-green-800'
-                            }`}
-                          >
-                            {isReserved ? '✓ Reservado' : '⭕ Disponible'}
-                          </span>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+      {/* MODAL LIBERAR */}
+      {releaseConfirm && view !== 'vip' && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white p-8 rounded-3xl max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-2xl font-bold mb-4">Confirmar Liberación</h3>
+            <div className="flex gap-4">
+              <button onClick={() => releaseGift(releaseConfirm)} className="flex-1 bg-red-500 text-white py-3 px-6 rounded-xl font-bold">Sí</button>
+              <button onClick={() => setReleaseConfirm(null)} className="flex-1 bg-gray-300 py-3 px-6 rounded-xl font-bold">Cancelar</button>
             </div>
-          ) : (
-            <p className="text-center text-gray-500 py-8">No hay regalos agregados aún</p>
-          )}
+          </div>
         </div>
       )}
     </div>
-  )
+  );
 }
 
-function GiftModal({ gift, onClose, onConfirm }) {
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-        <button
-          onClick={onClose}
-          className="float-right text-2xl font-bold text-gray-400 hover:text-gray-600 leading-none p-4"
-        >
-          ×
-        </button>
-        <div className="p-6 pt-2">
-          <h3 className="text-xl font-bold text-teal-600 mb-4">Confirmar Selección</h3>
+export default HouseShowerApp;
 
-          {gift.image && (
-            <img
-              src={gift.image}
-              alt={gift.name}
-              className="w-full h-48 object-cover rounded-lg mb-4"
-              onError={(e) => {
-                e.target.style.display = 'none'
-              }}
-            />
-          )}
-
-          <div className="mb-4">
-            <p className="text-lg font-bold text-gray-800">{gift.name}</p>
-            {gift.category && <p className="text-sm text-gray-600 mt-2">📂 {gift.category}</p>}
-            {gift.details && <p className="text-sm text-gray-600 mt-2">{gift.details}</p>}
-            {gift.buyUrl && (
-              <a
-                href={gift.buyUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-teal-600 hover:underline mt-2 inline-block"
-              >
-                🔗 Ver en tienda
-              </a>
-            )}
-          </div>
-
-          <div className="flex gap-3">
-            <button onClick={onClose} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-semibold transition-colors flex-1">
-              Cancelar
-            </button>
-            <button onClick={onConfirm} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors flex-1">
-              Confirmar
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export default HouseShowerApp
