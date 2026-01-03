@@ -134,34 +134,55 @@ function HouseShowerApp() {
       console.log('Found gift:', gift);
       
       if (!gift) {
+        console.error('❌ Regalo no encontrado');
         alert('❌ Regalo no encontrado');
         return;
       }
 
-      const newIsVip = currentVipStatus ? 0 : 1;
+      // Determine newIsVip correctly - handle both number and boolean
+      const currentIsVip = gift.isVip === 1 || gift.isVip === true;
+      const newIsVip = currentIsVip ? 0 : 1;
+      
       console.log('Sending PUT request to:', `${API_URL}/api/gifts/${id}`);
-      console.log('New isVip value:', newIsVip);
+      console.log('Current isVip:', currentIsVip, 'New isVip value:', newIsVip);
+      
+      const payload = {
+        ...gift,
+        isVip: newIsVip
+      };
+      console.log('Full payload:', payload);
       
       const res = await fetch(`${API_URL}/api/gifts/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...gift,
-          isVip: newIsVip
-        })
+        body: JSON.stringify(payload)
       });
 
       console.log('Response status:', res.status);
-      const updated = await res.json();
+      const responseText = await res.text();
+      console.log('Response text:', responseText);
+      
+      let updated;
+      try {
+        updated = JSON.parse(responseText);
+      } catch (e) {
+        console.error('Failed to parse JSON response:', e);
+        alert('❌ Error: Response no es JSON válido');
+        return;
+      }
+      
       console.log('Updated gift:', updated);
       
       if (!res.ok) {
+        console.error('❌ Server error:', updated);
         alert('❌ Error: ' + JSON.stringify(updated));
         return;
       }
 
+      console.log('✅ Update successful, refreshing gifts...');
       setGifts(gifts.map(g => g.id === id ? updated : g));
       alert('✅ ¡VIP actualizado!');
+      await fetchGifts(); // Refresh to be sure
     } catch (error) {
       console.error('❌ Fatal error toggling VIP:', error);
       alert('❌ Error: ' + error.message);
