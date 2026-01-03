@@ -1,10 +1,10 @@
-
 import { useState, useEffect } from 'react';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 function HouseShowerApp() {
   const [view, setView] = useState('public');
-  const [guestName, setGuestName] = useState(localStorage.getItem('guestName') || '');
+  const [guestName, setGuestName] = useState('');
+  const [hasEntered, setHasEntered] = useState(false);
   const [guestToken, setGuestToken] = useState(localStorage.getItem('guestToken') || '');
   const [gifts, setGifts] = useState([]);
   const [reservations, setReservations] = useState([]);
@@ -17,6 +17,12 @@ function HouseShowerApp() {
   useEffect(() => {
     fetchGifts();
     fetchReservations();
+    const savedName = localStorage.getItem('guestName');
+    const savedToken = localStorage.getItem('guestToken');
+    if (savedName && savedToken) {
+      setGuestName(savedName);
+      setHasEntered(true);
+    }
   }, []);
 
   const fetchGifts = async () => {
@@ -35,12 +41,24 @@ function HouseShowerApp() {
     } catch (e) { console.error(e); }
   };
 
-  const saveGuest = () => {
-    if (!guestName.trim()) return;
+  const continueAsGuest = () => {
+    if (!guestName.trim()) {
+      alert('Por favor ingresa tu nombre');
+      return;
+    }
     const token = Math.random().toString(36).substr(2) + Date.now().toString(36);
     localStorage.setItem('guestName', guestName);
     localStorage.setItem('guestToken', token);
     setGuestToken(token);
+    setHasEntered(true);
+  };
+
+  const goBack = () => {
+    setHasEntered(false);
+    setGuestName('');
+    setGuestToken('');
+    localStorage.removeItem('guestName');
+    localStorage.removeItem('guestToken');
   };
 
   const reserveGift = async (giftId) => {
@@ -100,7 +118,7 @@ function HouseShowerApp() {
   const vipGifts = gifts.filter(g => g.isVip === 1 || g.isVip === true);
 
   // VISTA VIP
-  if (view === 'vip' && guestName) {
+  if (view === 'vip' && hasEntered) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-black to-gray-900 py-20 px-4 text-white">
         <nav className="max-w-6xl mx-auto flex justify-between items-center mb-16">
@@ -166,14 +184,14 @@ function HouseShowerApp() {
             🎁 House Shower Registry
           </h1>
           <div className="flex gap-4 items-center">
-            {guestName && (
+            {hasEntered && (
               <span className="text-sm bg-green-100 text-green-800 px-3 py-1 rounded-full font-medium">
                 👋 {guestName}
               </span>
             )}
             <button
-              onClick={() => setView(view === 'vip' && guestName ? 'public' : 'vip')}
-              disabled={!guestName}
+              onClick={() => setView(view === 'vip' && hasEntered ? 'public' : 'vip')}
+              disabled={!hasEntered}
               className="bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-black font-bold py-2 px-6 rounded-xl shadow-lg hover:shadow-amber-500/50 transition-all duration-300 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               ✨ Zona VIP
@@ -188,35 +206,44 @@ function HouseShowerApp() {
         </div>
       </nav>
 
-      {/* FORM INVITADO */}
-      {!guestName && view === 'public' && (
+      {/* PASO 1: FORM INGRESO NOMBRE */}
+      {!hasEntered && view === 'public' && (
         <div className="max-w-md mx-auto mt-32 p-12 bg-white rounded-3xl shadow-2xl border border-gray-200">
           <h2 className="text-4xl font-bold mb-8 text-gray-800">¡Bienvenido al House Shower!</h2>
-          <p className="text-gray-600 mb-8 text-lg">Ingresa tu nombre para ver y reservar regalos</p>
+          <p className="text-gray-600 mb-8 text-lg">Ingresa tu nombre completo para continuar</p>
           <input
+            type="text"
             value={guestName}
             onChange={(e) => setGuestName(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && continueAsGuest()}
             className="w-full p-6 border-2 border-gray-200 rounded-3xl text-2xl mb-8 text-center focus:ring-4 focus:ring-blue-200 focus:border-blue-500 transition-all shadow-lg"
             placeholder="Tu nombre completo"
+            autoFocus
           />
           <button 
-            onClick={saveGuest} 
+            onClick={continueAsGuest}
             disabled={!guestName.trim()}
             className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-6 px-8 rounded-3xl font-bold text-xl shadow-2xl hover:shadow-blue-500/50 hover:scale-105 transition-all duration-300 disabled:opacity-50"
           >
-            ✨ ¡Empezar a Reservar!
+            ➡️ Continuar
           </button>
         </div>
       )}
 
-      {/* REGALOS NORMALES */}
-      {guestName && view === 'public' && (
+      {/* PASO 2: REGALOS */}
+      {hasEntered && view === 'public' && (
         <div className="max-w-6xl mx-auto py-20 px-6">
           <div className="text-center mb-20">
             <h2 className="text-5xl font-bold mb-4 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
               Regalos Disponibles
             </h2>
             <p className="text-xl text-gray-600">¡Elige lo que más te guste! ✨</p>
+            <button 
+              onClick={goBack}
+              className="mt-6 bg-gray-400 hover:bg-gray-500 text-white px-6 py-2 rounded-xl font-bold text-sm"
+            >
+              ← Cambiar nombre
+            </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {gifts.filter(g => !g.isVip && g.isVip !== 1).map(gift => (
@@ -226,7 +253,7 @@ function HouseShowerApp() {
                 {gift.price && <div className="text-right mb-4"><span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-lg font-bold">${gift.price}</span></div>}
                 <p className="text-gray-600 mb-6 leading-relaxed">{gift.details}</p>
                 {isReserved(gift.id) ? (
-                  <button className="w-full bg-gray-200 text-gray-700 py-4 px-6 rounded-2xl font-bold text-lg shadow-md">✅ Reservado</button>
+                  <button className="w-full bg-gray-200 text-gray-700 py-4 px-6 rounded-2xl font-bold text-lg shadow-md cursor-not-allowed">✅ Reservado</button>
                 ) : (
                   <button 
                     onClick={() => reserveGift(gift.id)} 
@@ -359,7 +386,6 @@ function HouseShowerApp() {
                 className="w-full p-6 border-2 border-gray-200 rounded-3xl focus:ring-4 focus:ring-emerald-200 focus:border-emerald-500"
               />
               
-              {/* CHECKBOX VIP */}
               <div className="flex items-center gap-4 p-6 bg-amber-50 border-2 border-amber-300 rounded-3xl">
                 <input
                   type="checkbox"
@@ -441,4 +467,3 @@ function HouseShowerApp() {
 }
 
 export default HouseShowerApp;
-

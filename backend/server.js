@@ -12,7 +12,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// GET: Todos los gifts CON PRICE
+// GET: Todos los gifts CON PRICE E isVip
 app.get('/api/gifts', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM gifts ORDER BY id DESC');
@@ -33,13 +33,13 @@ app.get('/api/reservations', async (req, res) => {
   }
 });
 
-// POST: Agregar regalo CON PRICE
+// POST: Agregar regalo CON PRICE E isVip
 app.post('/api/gifts', async (req, res) => {
-  const { name, image, category, details, buyUrl, price } = req.body;
+  const { name, image, category, details, buyUrl, price, isVip } = req.body;
   try {
     const result = await pool.query(
-      'INSERT INTO gifts (name, image, category, details, buyUrl, price) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [name, image, category, details, buyUrl, price || 0]
+      'INSERT INTO gifts (name, image, category, details, buyUrl, price, isVip) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [name, image, category, details, buyUrl, price || 0, isVip ? 1 : 0]
     );
     res.json(result.rows[0]);
   } catch (error) {
@@ -85,14 +85,14 @@ app.delete('/api/gifts/:id', async (req, res) => {
   }
 });
 
-// PUT: Actualizar CON PRICE
+// PUT: Actualizar CON PRICE E isVip
 app.put('/api/gifts/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, image, category, details, buyUrl, price } = req.body;
+  const { name, image, category, details, buyUrl, price, isVip } = req.body;
   try {
     const result = await pool.query(
-      'UPDATE gifts SET name=$1, image=$2, category=$3, details=$4, buyUrl=$5, price=$6 WHERE id=$7 RETURNING *',
-      [name, image, category, details, buyUrl, price || 0, id]
+      'UPDATE gifts SET name=$1, image=$2, category=$3, details=$4, buyUrl=$5, price=$6, isVip=$7 WHERE id=$8 RETURNING *',
+      [name, image, category, details, buyUrl, price || 0, isVip ? 1 : 0, id]
     );
     res.json(result.rows[0]);
   } catch (error) {
