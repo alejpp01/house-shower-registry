@@ -308,9 +308,12 @@ function HouseShowerApp() {
         <div className="max-w-6xl mx-auto py-20 px-6">
           <div className="text-center mb-20">
             <h2 className="text-5xl font-bold mb-4 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
-              Regalos Disponibles
+              🎁 Regalos Disponibles
             </h2>
             <p className="text-xl text-gray-600">¡Elige lo que más te guste! ✨</p>
+            <p className="text-xs text-gray-500 mt-2">
+              Total regalos: {gifts.length} | Normales: {gifts.filter(g => !g.isVip || g.isVip === 0).length} | 👑 VIP: {gifts.filter(g => g.isVip === 1).length}
+            </p>
             <button 
               onClick={goBack}
               className="mt-6 bg-gray-400 hover:bg-gray-500 text-white px-6 py-2 rounded-xl font-bold text-sm"
@@ -319,7 +322,7 @@ function HouseShowerApp() {
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {gifts.filter(g => g.isVip !== 1 && g.isVip !== true).map(gift => (
+            {gifts.filter(g => !g.isVip || g.isVip === 0).map(gift => (
               <div key={gift.id} className="bg-white/70 backdrop-blur-sm rounded-3xl p-8 shadow-xl hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 border border-gray-200">
                 <img src={gift.image || 'https://via.placeholder.com/400x300?text=Regalo'} alt={gift.name} className="w-full h-64 object-cover rounded-2xl mb-6 shadow-lg" />
                 <h3 className="text-2xl font-bold mb-3 text-gray-800">{gift.name}</h3>
