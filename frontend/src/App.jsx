@@ -246,7 +246,7 @@ function HouseShowerApp() {
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {gifts.filter(g => !g.isVip && g.isVip !== 1).map(gift => (
+            {gifts.filter(g => g.isVip !== 1 && g.isVip !== true).map(gift => (
               <div key={gift.id} className="bg-white/70 backdrop-blur-sm rounded-3xl p-8 shadow-xl hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 border border-gray-200">
                 <img src={gift.image || 'https://via.placeholder.com/400x300?text=Regalo'} alt={gift.name} className="w-full h-64 object-cover rounded-2xl mb-6 shadow-lg" />
                 <h3 className="text-2xl font-bold mb-3 text-gray-800">{gift.name}</h3>
