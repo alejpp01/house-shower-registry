@@ -5,11 +5,11 @@ function HouseShowerApp() {
   const [view, setView] = useState('public');
   const [guestName, setGuestName] = useState('');
   const [hasEntered, setHasEntered] = useState(false);
-  const [guestToken, setGuestToken] = useState(localStorage.getItem('guestToken') || '');
+  const [guestToken, setGuestToken] = useState('');
   const [gifts, setGifts] = useState([]);
   const [reservations, setReservations] = useState([]);
   const [adminPassword, setAdminPassword] = useState('');
-  const [isAdminAuth, setIsAdminAuth] = useState(localStorage.getItem('isAdminAuth') === 'true');
+  const [isAdminAuth, setIsAdminAuth] = useState(false);
   const [adminTab, setAdminTab] = useState('add');
   const [newGift, setNewGift] = useState({ name: '', image: '', category: '', details: '', buyUrl: '', price: '', isVip: false });
   const [releaseConfirm, setReleaseConfirm] = useState(null);
@@ -17,12 +17,6 @@ function HouseShowerApp() {
   useEffect(() => {
     fetchGifts();
     fetchReservations();
-    const savedName = localStorage.getItem('guestName');
-    const savedToken = localStorage.getItem('guestToken');
-    if (savedName && savedToken) {
-      setGuestName(savedName);
-      setHasEntered(true);
-    }
   }, []);
 
   // Refresh gifts when entering VIP view
@@ -55,8 +49,6 @@ function HouseShowerApp() {
       return;
     }
     const token = Math.random().toString(36).substr(2) + Date.now().toString(36);
-    localStorage.setItem('guestName', guestName);
-    localStorage.setItem('guestToken', token);
     setGuestToken(token);
     setHasEntered(true);
   };
@@ -65,8 +57,6 @@ function HouseShowerApp() {
     setHasEntered(false);
     setGuestName('');
     setGuestToken('');
-    localStorage.removeItem('guestName');
-    localStorage.removeItem('guestToken');
   };
 
   const reserveGift = async (giftId) => {
@@ -367,7 +357,6 @@ function HouseShowerApp() {
             onClick={() => {
               if (adminPassword === 'Juanchoesgey') {
                 setIsAdminAuth(true);
-                localStorage.setItem('isAdminAuth', 'true');
                 setView('admin');
               } else {
                 alert('Contraseña incorrecta');
@@ -391,7 +380,6 @@ function HouseShowerApp() {
             <button 
               onClick={() => {
                 setIsAdminAuth(false);
-                localStorage.removeItem('isAdminAuth');
                 setView('public');
               }}
               className="bg-red-500 hover:bg-red-600 text-white px-8 py-3 rounded-2xl font-bold shadow-lg hover:shadow-red-500/50 transition-all"
