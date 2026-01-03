@@ -128,19 +128,43 @@ function HouseShowerApp() {
 
   const toggleGiftVip = async (id, currentVipStatus) => {
     try {
+      console.log('🔄 toggleGiftVip called with id:', id, 'currentVipStatus:', currentVipStatus);
+      
       const gift = gifts.find(g => g.id === id);
+      console.log('Found gift:', gift);
+      
+      if (!gift) {
+        alert('❌ Regalo no encontrado');
+        return;
+      }
+
+      const newIsVip = currentVipStatus ? 0 : 1;
+      console.log('Sending PUT request to:', `${API_URL}/api/gifts/${id}`);
+      console.log('New isVip value:', newIsVip);
+      
       const res = await fetch(`${API_URL}/api/gifts/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...gift,
-          isVip: currentVipStatus ? 0 : 1
+          isVip: newIsVip
         })
       });
+
+      console.log('Response status:', res.status);
       const updated = await res.json();
+      console.log('Updated gift:', updated);
+      
+      if (!res.ok) {
+        alert('❌ Error: ' + JSON.stringify(updated));
+        return;
+      }
+
       setGifts(gifts.map(g => g.id === id ? updated : g));
+      alert('✅ ¡VIP actualizado!');
     } catch (error) {
-      console.error('Error toggling VIP:', error);
+      console.error('❌ Fatal error toggling VIP:', error);
+      alert('❌ Error: ' + error.message);
     }
   };
 
