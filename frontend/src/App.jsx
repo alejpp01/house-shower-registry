@@ -293,7 +293,7 @@ function HouseShowerApp() {
           >
             Entrar al Admin
           </button>
-          <p className="text-xs text-gray-500 mt-4 text-center">Contraseña: admin123</p>
+          <p className="text-xs text-gray-500 mt-4 text-center">Contraseña: perrota</p>
         </div>
       )}
 
