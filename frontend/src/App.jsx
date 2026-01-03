@@ -57,7 +57,7 @@ function HouseShowerApp() {
   }
 
   const handleAdminAuth = () => {
-    if (adminPassword === 'ADMIN123') {
+    if (adminPassword === 'juanchoesgey') {
       setIsAdminAuth(true)
       localStorage.setItem('isAdminAuth', 'true')
       setAdminPassword('')
@@ -204,7 +204,7 @@ function HouseShowerApp() {
       <nav className="bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <h1 className="text-2xl font-bold">🏠 House Shower</h1>
+            <h1 className="text-2xl font-bold">🏠 Chocoro Shower</h1>
             <div className="flex gap-3">
               <button
                 onClick={() => handlePublicView()}
@@ -494,7 +494,7 @@ function AdminLoginView({ onAuth, password, onPasswordChange }) {
           </button>
         </form>
         <p className="text-xs text-gray-500 text-center mt-4">
-          Clave demo: ADMIN123
+          Clave demo: juanchoesgey
         </p>
       </div>
     </div>
