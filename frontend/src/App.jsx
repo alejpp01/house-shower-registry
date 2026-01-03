@@ -281,7 +281,7 @@ function HouseShowerApp() {
           />
           <button 
             onClick={() => {
-              if (adminPassword === 'admin123') {
+              if (adminPassword === 'Juanchoesgey') {
                 setIsAdminAuth(true);
                 localStorage.setItem('isAdminAuth', 'true');
                 setView('admin');
