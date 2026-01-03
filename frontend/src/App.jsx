@@ -25,6 +25,14 @@ function HouseShowerApp() {
     }
   }, []);
 
+  // Refresh gifts when entering VIP view
+  useEffect(() => {
+    if (view === 'vip' && hasEntered) {
+      fetchGifts();
+      fetchReservations();
+    }
+  }, [view, hasEntered]);
+
   const fetchGifts = async () => {
     try {
       const res = await fetch(`${API_URL}/api/gifts`);
@@ -215,6 +223,7 @@ function HouseShowerApp() {
                     </span>
                   </div>
                   <h3 className="text-2xl font-serif text-white mb-4">{gift.name}</h3>
+                  {gift.price && <div className="text-right mb-4"><span className="bg-amber-500/20 text-amber-400 px-3 py-1 rounded-full text-lg font-bold border border-amber-500/40">${gift.price}</span></div>}
                   <p className="text-slate-300 font-light mb-6 leading-relaxed">{gift.details}</p>
                   {isReserved(gift.id) ? (
                     <button onClick={() => setReleaseConfirm(gift.id)} className="w-full bg-slate-700/50 hover:bg-slate-600 border border-slate-500/50 text-slate-300 py-4 px-6 rounded-2xl font-serif font-semibold transition-all">
