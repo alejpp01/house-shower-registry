@@ -1,6 +1,6 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "frontend/dist",
+  "outputDirectory": "dist",
   "functions": {
     "backend/api/**/*.js": {
       "memory": 1024,
