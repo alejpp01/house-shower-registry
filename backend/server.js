@@ -4,7 +4,20 @@ const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
-app.use(cors());
+
+// ⭐ CORS CONFIGURADO CORRECTAMENTE
+app.use(cors({
+  origin: [
+    'https://chocoro-shower-vacilao.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://localhost:3001'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 
 const pool = new Pool({
@@ -101,5 +114,10 @@ app.put('/api/gifts/:id', async (req, res) => {
   }
 });
 
+// ⭐ Health check endpoint
+app.get('/', (req, res) => {
+  res.json({ status: '✅ Backend running', port: process.env.PORT || 3001 });
+});
+
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, '0.0.0.0', () => console.log(`API en puerto ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`✅ API en puerto ${PORT}`));
