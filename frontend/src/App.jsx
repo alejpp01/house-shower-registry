@@ -28,18 +28,24 @@ function HouseShowerApp() {
   }, [view, hasEntered]);
 
   const fetchGifts = async () => {
-    try {
-      const res = await fetch(`${API_URL}/api/gifts`);
-      const data = await res.json();
-      // 🔥 NORMALIZAR isVip A BOOLEAN
-      const normalized = data.map(gift => ({
-        ...gift,
-        isVip: Number(gift.isVip) === 1
-      }));
-      setGifts(normalized);
-    } catch (e) { console.error(e); }
-  };
+  try {
+    const res = await fetch(`${API_URL}/api/gifts`);
+    const data = await res.json();
 
+    const normalized = data.map(gift => ({
+      ...gift,
+      isVip:
+        gift.isVip === 1 ||
+        gift.isVip === "1" ||
+        gift.isVip === true ||
+        gift.isVip === "true"
+    }));
+
+    setGifts(normalized);
+  } catch (e) {
+    console.error(e);
+  }
+};
   const fetchReservations = async () => {
     try {
       const res = await fetch(`${API_URL}/api/reservations`);
