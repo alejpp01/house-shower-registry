@@ -7,13 +7,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Conexión a Neon
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-// GET: Obtener todos los regalos
+// GET: Todos los gifts CON PRICE
 app.get('/api/gifts', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM gifts ORDER BY id DESC');
@@ -24,24 +23,23 @@ app.get('/api/gifts', async (req, res) => {
   }
 });
 
-// GET: Obtener todas las reservaciones
+// GET: Reservas
 app.get('/api/reservations', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM reservations');
     res.json(result.rows);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Error al obtener reservaciones' });
   }
 });
 
-// POST: Agregar regalo
+// POST: Agregar regalo CON PRICE
 app.post('/api/gifts', async (req, res) => {
-  const { name, image, category, details, buyUrl } = req.body;
+  const { name, image, category, details, buyUrl, price } = req.body;
   try {
     const result = await pool.query(
-      'INSERT INTO gifts (name, image, category, details, buyUrl) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [name, image, category, details, buyUrl]
+      'INSERT INTO gifts (name, image, category, details, buyUrl, price) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [name, image, category, details, buyUrl, price || 0]
     );
     res.json(result.rows[0]);
   } catch (error) {
@@ -50,7 +48,7 @@ app.post('/api/gifts', async (req, res) => {
   }
 });
 
-// POST: Reservar regalo
+// POST: Reservar
 app.post('/api/reservations', async (req, res) => {
   const { giftId, selectedBy, token } = req.body;
   try {
@@ -65,14 +63,13 @@ app.post('/api/reservations', async (req, res) => {
   }
 });
 
-// DELETE: Liberar regalo
+// DELETE: Liberar
 app.delete('/api/reservations/:giftId', async (req, res) => {
   const { giftId } = req.params;
   try {
     await pool.query('DELETE FROM reservations WHERE giftId = $1', [giftId]);
     res.json({ success: true });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Error al liberar' });
   }
 });
@@ -84,19 +81,18 @@ app.delete('/api/gifts/:id', async (req, res) => {
     await pool.query('DELETE FROM gifts WHERE id = $1', [id]);
     res.json({ success: true });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Error al eliminar' });
   }
 });
 
-// PUT: Actualizar regalo
+// PUT: Actualizar CON PRICE
 app.put('/api/gifts/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, image, category, details, buyUrl } = req.body;
+  const { name, image, category, details, buyUrl, price } = req.body;
   try {
     const result = await pool.query(
-      'UPDATE gifts SET name = $1, image = $2, category = $3, details = $4, buyUrl = $5 WHERE id = $6 RETURNING *',
-      [name, image, category, details, buyUrl, id]
+      'UPDATE gifts SET name=$1, image=$2, category=$3, details=$4, buyUrl=$5, price=$6 WHERE id=$7 RETURNING *',
+      [name, image, category, details, buyUrl, price || 0, id]
     );
     res.json(result.rows[0]);
   } catch (error) {
@@ -106,6 +102,4 @@ app.put('/api/gifts/:id', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, '0.0.0.0', () => console.log(`API escuchando en puerto ${PORT}`));
-
-    
+app.listen(PORT, '0.0.0.0', () => console.log(`API en puerto ${PORT}`));
