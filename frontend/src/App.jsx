@@ -78,17 +78,47 @@ function HouseShowerApp() {
   };
 
   const addGift = async () => {
-    if (!newGift.name.trim()) return;
-    await fetch(`${API_URL}/api/gifts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...newGift,
+    console.log('Starting addGift with:', newGift);
+    
+    if (!newGift.name.trim()) {
+      alert('Por favor ingresa el nombre del regalo');
+      return;
+    }
+
+    try {
+      const payload = {
+        name: newGift.name,
+        image: newGift.image,
+        category: newGift.category,
+        details: newGift.details,
+        buyUrl: newGift.buyUrl,
+        price: newGift.price || '0',
         isVip: newGift.isVip ? 1 : 0
-      })
-    });
-    setNewGift({ name: '', image: '', category: '', details: '', buyUrl: '', price: '', isVip: false });
-    fetchGifts();
+      };
+      
+      console.log('Sending payload:', payload);
+      
+      const res = await fetch(`${API_URL}/api/gifts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      console.log('Response from server:', data);
+      
+      if (!res.ok) {
+        alert('Error: ' + JSON.stringify(data));
+        return;
+      }
+
+      alert('✅ ¡Regalo agregado!');
+      setNewGift({ name: '', image: '', category: '', details: '', buyUrl: '', price: '', isVip: false });
+      fetchGifts();
+    } catch (error) {
+      console.error('Fatal error:', error);
+      alert('❌ Error: ' + error.message);
+    }
   };
 
   const deleteGift = async (id) => {
@@ -293,7 +323,7 @@ function HouseShowerApp() {
           >
             Entrar al Admin
           </button>
-          <p className="text-xs text-gray-500 mt-4 text-center">Contraseña: perrota</p>
+          <p className="text-xs text-gray-500 mt-4 text-center">Contraseña: Juanchoesgey</p>
         </div>
       )}
 
