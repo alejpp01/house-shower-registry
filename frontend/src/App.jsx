@@ -189,8 +189,8 @@ function HouseShowerApp() {
 
       console.log('✅ Update successful, refreshing gifts...');
       setGifts(gifts.map(g => g.id === id ? updated : g));
-      alert('✅ ¡VIP actualizado!');
       await fetchGifts(); // Refresh to be sure
+      alert('✅ ¡VIP actualizado!');
     } catch (error) {
       console.error('❌ Fatal error toggling VIP:', error);
       alert('❌ Error: ' + error.message);
