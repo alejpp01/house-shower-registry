@@ -5,6 +5,9 @@ require('dotenv').config();
 
 const app = express();
 
+/* =========================
+   CORS
+========================= */
 app.use(cors({
   origin: [
     'https://chocoro-shower-vacilao.vercel.app',
@@ -17,20 +20,23 @@ app.use(cors({
 
 app.use(express.json());
 
+/* =========================
+   DATABASE
+========================= */
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
 /* =========================
-   HELPER: normalizar isVip
+   HELPER
 ========================= */
 function normalizeIsVip(value) {
   return value === true || value === 'true' || value === 1 || value === '1';
 }
 
 /* =========================
-   GET GIFTS
+   GIFTS
 ========================= */
 app.get('/api/gifts', async (_, res) => {
   try {
@@ -47,7 +53,6 @@ app.get('/api/gifts', async (_, res) => {
       FROM gifts
       ORDER BY id DESC
     `);
-
     res.json(result.rows);
   } catch (err) {
     console.error(err);
@@ -55,9 +60,6 @@ app.get('/api/gifts', async (_, res) => {
   }
 });
 
-/* =========================
-   POST GIFT
-========================= */
 app.post('/api/gifts', async (req, res) => {
   const { name, category, image, details, buyUrl, price, isVip } = req.body;
 
@@ -87,9 +89,6 @@ app.post('/api/gifts', async (req, res) => {
   }
 });
 
-/* =========================
-   PUT GIFT
-========================= */
 app.put('/api/gifts/:id', async (req, res) => {
   const { id } = req.params;
   const { name, category, image, details, buyUrl, price, isVip } = req.body;
@@ -126,15 +125,60 @@ app.put('/api/gifts/:id', async (req, res) => {
   }
 });
 
-/* =========================
-   DELETE GIFT
-========================= */
 app.delete('/api/gifts/:id', async (req, res) => {
   try {
     await pool.query('DELETE FROM gifts WHERE id = $1', [req.params.id]);
     res.json({ success: true });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Error al eliminar regalo' });
+  }
+});
+
+/* =========================
+   RESERVATIONS
+========================= */
+app.get('/api/reservations', async (_, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        gift_id AS "giftId",
+        selected_by AS "selectedBy"
+      FROM reservations
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener reservas' });
+  }
+});
+
+app.post('/api/reservations', async (req, res) => {
+  const { giftId, selectedBy, token } = req.body;
+
+  try {
+    await pool.query(`
+      INSERT INTO reservations (gift_id, selected_by, token)
+      VALUES ($1, $2, $3)
+    `, [giftId, selectedBy, token]);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al reservar regalo' });
+  }
+});
+
+app.delete('/api/reservations/:giftId', async (req, res) => {
+  try {
+    await pool.query(
+      'DELETE FROM reservations WHERE gift_id = $1',
+      [req.params.giftId]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al liberar reserva' });
   }
 });
 
