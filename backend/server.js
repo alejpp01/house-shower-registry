@@ -23,6 +23,13 @@ const pool = new Pool({
 });
 
 /* =========================
+   HELPER: normalizar isVip
+========================= */
+function normalizeIsVip(value) {
+  return value === true || value === 'true' || value === 1 || value === '1';
+}
+
+/* =========================
    GET GIFTS
 ========================= */
 app.get('/api/gifts', async (_, res) => {
@@ -55,6 +62,8 @@ app.post('/api/gifts', async (req, res) => {
   const { name, category, image, details, buyUrl, price, isVip } = req.body;
 
   try {
+    const vipValue = normalizeIsVip(isVip);
+
     const result = await pool.query(`
       INSERT INTO gifts
         (name, category, image, details, buyurl, price, isvip)
@@ -68,7 +77,7 @@ app.post('/api/gifts', async (req, res) => {
       details,
       buyUrl,
       price || 0,
-      Boolean(isVip)
+      vipValue
     ]);
 
     res.json(result.rows[0]);
@@ -86,6 +95,8 @@ app.put('/api/gifts/:id', async (req, res) => {
   const { name, category, image, details, buyUrl, price, isVip } = req.body;
 
   try {
+    const vipValue = normalizeIsVip(isVip);
+
     const result = await pool.query(`
       UPDATE gifts SET
         name = $1,
@@ -104,7 +115,7 @@ app.put('/api/gifts/:id', async (req, res) => {
       details,
       buyUrl,
       price || 0,
-      Boolean(isVip),
+      vipValue,
       id
     ]);
 
