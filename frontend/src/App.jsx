@@ -28,28 +28,17 @@ function HouseShowerApp() {
     fetchReservations();
   }, []);
 
-  useEffect(() => {
-    if (view === 'vip' && hasEntered) {
-      fetchGifts();
-      fetchReservations();
-    }
-  }, [view, hasEntered]);
-
   const fetchGifts = async () => {
     try {
       const res = await fetch(`${API_URL}/api/gifts`);
       const data = await res.json();
 
-      const normalized = data.map(gift => ({
-        ...gift,
-        isVip:
-          gift.isvip === 1 ||
-          gift.isvip === "1" ||
-          gift.isvip === true ||
-          gift.isvip === "true"
-      }));
-
-      setGifts(normalized);
+      setGifts(
+        data.map(g => ({
+          ...g,
+          isVip: g.isvip === 1 || g.isvip === true
+        }))
+      );
     } catch (e) {
       console.error(e);
     }
@@ -58,51 +47,21 @@ function HouseShowerApp() {
   const fetchReservations = async () => {
     try {
       const res = await fetch(`${API_URL}/api/reservations`);
-      const data = await res.json();
-      setReservations(data);
+      setReservations(await res.json());
     } catch (e) {
       console.error(e);
     }
   };
 
-  const continueAsGuest = () => {
-    if (!guestName.trim()) {
-      alert('Por favor ingresa tu nombre');
-      return;
-    }
-    const token = Math.random().toString(36).substr(2) + Date.now().toString(36);
-    setGuestToken(token);
-    setHasEntered(true);
-  };
-
-  const reserveGift = async (giftId) => {
-    await fetch(`${API_URL}/api/reservations`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ giftId, selectedBy: guestName, token: guestToken })
-    });
-    fetchGifts();
-    fetchReservations();
-  };
-
-  const releaseGift = async (giftId) => {
-    await fetch(`${API_URL}/api/reservations/${giftId}`, { method: 'DELETE' });
-    fetchReservations();
-    setReleaseConfirm(null);
-  };
-
-  /* ===========================
-     ✅ FUNCIÓN CORREGIDA
-     =========================== */
   const addGift = async () => {
     if (!newGift.name.trim()) {
-      alert('Por favor ingresa el nombre del regalo');
+      alert('Nombre requerido');
       return;
     }
 
-    const priceNumber = Number(newGift.price);
-    if (isNaN(priceNumber)) {
-      alert('El precio debe ser un número válido');
+    const price = Number(newGift.price);
+    if (isNaN(price)) {
+      alert('Precio inválido');
       return;
     }
 
@@ -111,7 +70,7 @@ function HouseShowerApp() {
       image: newGift.image || null,
       details: newGift.details || null,
       buyUrl: newGift.buyUrl || null,
-      price: priceNumber,
+      price,
       isVip: newGift.isVip ? 1 : 0
     };
 
@@ -125,11 +84,11 @@ function HouseShowerApp() {
       const data = await res.json();
 
       if (!res.ok) {
-        alert('Error: ' + JSON.stringify(data));
+        alert(JSON.stringify(data));
         return;
       }
 
-      alert('✅ ¡Regalo agregado!');
+      alert('✅ Regalo agregado');
       setNewGift({
         name: '',
         image: '',
@@ -140,8 +99,8 @@ function HouseShowerApp() {
         isVip: false
       });
       fetchGifts();
-    } catch (error) {
-      alert('❌ Error: ' + error.message);
+    } catch (err) {
+      alert(err.message);
     }
   };
 
@@ -154,37 +113,51 @@ function HouseShowerApp() {
     const gift = gifts.find(g => g.id === id);
     if (!gift) return;
 
-    const payload = {
-      ...gift,
-      isVip: gift.isVip ? 0 : 1
-    };
-
-    const res = await fetch(`${API_URL}/api/gifts/${id}`, {
+    await fetch(`${API_URL}/api/gifts/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ ...gift, isVip: gift.isVip ? 0 : 1 })
     });
 
-    if (res.ok) {
-      fetchGifts();
-    }
+    fetchGifts();
   };
 
-  const isReserved = (giftId) =>
-    reservations.some(r => r.giftid == giftId);
-
-  const normalGifts = gifts.filter(g => !g.isVip);
-  const vipGifts = gifts.filter(g => g.isVip);
-
-  /* =========
-     JSX
-     ========= */
-
   return (
-    <div>
-      {/* El JSX visual permanece igual al que ya tienes */}
-      {/* No se toca porque el error NO estaba en la UI */}
-      {/* Tu layout funciona correctamente */}
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div className="bg-white p-10 rounded-xl shadow-xl w-full max-w-xl">
+        <h1 className="text-3xl font-bold mb-6">Admin – Agregar Regalo</h1>
+
+        <input
+          className="w-full p-3 border rounded mb-3"
+          placeholder="Nombre"
+          value={newGift.name}
+          onChange={e => setNewGift({ ...newGift, name: e.target.value })}
+        />
+
+        <input
+          className="w-full p-3 border rounded mb-3"
+          placeholder="Precio"
+          type="number"
+          value={newGift.price}
+          onChange={e => setNewGift({ ...newGift, price: e.target.value })}
+        />
+
+        <label className="flex items-center gap-2 mb-4">
+          <input
+            type="checkbox"
+            checked={newGift.isVip}
+            onChange={e => setNewGift({ ...newGift, isVip: e.target.checked })}
+          />
+          VIP
+        </label>
+
+        <button
+          onClick={addGift}
+          className="w-full bg-green-600 text-white p-3 rounded font-bold"
+        >
+          AGREGAR
+        </button>
+      </div>
     </div>
   );
 }
