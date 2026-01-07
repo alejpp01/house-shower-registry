@@ -46,15 +46,18 @@ function HouseShowerApp() {
     }
   };
 
-  const fetchReservations = async () => {
-    try {
-      const res = await fetch(`${API_URL}/api/reservations`);
-      const data = await res.json();
-      setReservations(data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
+ const fetchReservations = async () => {
+  try {
+    const res = await fetch(`${API_URL}/api/reservations`);
+    if (!res.ok) throw new Error('reservations error');
+    const data = await res.json();
+    setReservations(data);
+  } catch (err) {
+    console.warn('Reservas no cargadas');
+    setReservations([]);
+  }
+};
+
 
   const continueAsGuest = () => {
     if (!guestName.trim()) {
