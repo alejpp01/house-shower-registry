@@ -25,26 +25,28 @@ export default async function handler(req, res) {
       return res.status(200).json(result.rows);
     }
 
-    if (req.method === 'POST') {
-      const { name, image, category, details, buyUrl, price, isVip } = req.body;
+  if (req.method === 'POST') {
+  const { name, image, category, details, buyUrl, price, isVip } = req.body;
 
-      const result = await pool.query(`
-        INSERT INTO gifts
-          (name, image_url, category, description, buy_url, price, "isVip")
-        VALUES ($1,$2,$3,$4,$5,$6,$7)
-        RETURNING *
-      `, [
-        name,
-        image,
-        category,
-        details,
-        buyUrl,
-        price || 0,
-        Boolean(isVip)
-      ]);
+  const result = await pool.query(`
+    INSERT INTO gifts
+      (name, image_url, category, description, buy_url, price, "isVip", active)
+    VALUES
+      ($1,$2,$3,$4,$5,$6,$7,true)
+    RETURNING *
+  `, [
+    name,
+    image || null,
+    category || null,
+    details || null,
+    buyUrl || null,
+    Number(price) || 0,
+    Boolean(isVip)
+  ]);
 
-      return res.status(201).json(result.rows[0]);
-    }
+  return res.status(201).json(result.rows[0]);
+}
+
 
     if (req.method === 'PUT') {
       const { id } = req.query;
