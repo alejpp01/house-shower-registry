@@ -29,11 +29,10 @@ const pool = new Pool({
 });
 
 /* =========================
-   HELPER
+   HELPERS
 ========================= */
-function normalizeIsVip(value) {
-  return value === true || value === 'true' || value === 1 || value === '1';
-}
+const normalizeIsVip = (v) =>
+  v === true || v === 'true' || v === 1 || v === '1';
 
 /* =========================
    GIFTS
@@ -44,8 +43,8 @@ app.get('/api/gifts', async (_, res) => {
       SELECT
         id,
         name,
-        category,
         image,
+        category,
         details,
         buyurl AS "buyUrl",
         price,
@@ -64,23 +63,20 @@ app.post('/api/gifts', async (req, res) => {
   const { name, category, image, details, buyUrl, price, isVip } = req.body;
 
   try {
-    const vipValue = normalizeIsVip(isVip);
-
     const result = await pool.query(`
-     INSERT INTO gifts
-(name, image, details, buyurl, price, isvip)
-VALUES ($1, $2, $3, $4, $5, $6)
-
+      INSERT INTO gifts
+      (name, category, image, details, buyurl, price, isvip)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *
     `, [
-  name,
-  image,
-  details,
-  buyUrl,
-  price || 0,
-  vipValue
-]
-);
+      name,
+      category,
+      image,
+      details,
+      buyUrl,
+      price || 0,
+      normalizeIsVip(isVip) ? 1 : 0
+    ]);
 
     res.json(result.rows[0]);
   } catch (err) {
@@ -91,29 +87,28 @@ VALUES ($1, $2, $3, $4, $5, $6)
 
 app.put('/api/gifts/:id', async (req, res) => {
   const { id } = req.params;
-  const {name, image, details, buyUrl, price, isVip } = req.body;
+  const { name, image, category, details, buyUrl, price, isVip } = req.body;
 
   try {
-    const vipValue = normalizeIsVip(isVip);
-
     const result = await pool.query(`
       UPDATE gifts SET
         name = $1,
         image = $2,
-        details = $3,
-        buyurl = $4,
-        price = $5,
-        isvip = $6
-      WHERE id = $7
+        category = $3,
+        details = $4,
+        buyurl = $5,
+        price = $6,
+        isvip = $7
+      WHERE id = $8
       RETURNING *
     `, [
       name,
-      category,
       image,
+      category,
       details,
       buyUrl,
       price || 0,
-      vipValue,
+      normalizeIsVip(isVip) ? 1 : 0,
       id
     ]);
 
