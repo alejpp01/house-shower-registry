@@ -1,42 +1,80 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 
-const API_URL =
-  import.meta.env.VITE_API_URL || 'http://localhost:3001';
+// app.jsx completo: selección con cantidades, zona VIP separada, CRUD de regalos,
+// panel admin muestra quién seleccionó cada objeto y permite modificar/eliminar,
+// los objetos seleccionados por alguien aparecen tachados.
 
-function App() {
-  const [currentStep, setCurrentStep] = useState('name'); // 'name', 'selection', 'admin', 'adminPassword'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const CORRECT_PASSWORD = 'Juanchoesgey';
+
+export default function App() {
+  const [currentStep, setCurrentStep] = useState('name'); // 'name' | 'selection' | 'vip' | 'adminPassword' | 'admin'
   const [userName, setUserName] = useState('');
+
+  // Data from server
   const [gifts, setGifts] = useState([]);
-  const [selectedGifts, setSelectedGifts] = useState([]);
+  const [selections, setSelections] = useState([]); // { id, giftId, userName, qty, createdAt }
+
+  // Selection local state: map giftId => qty
+  const [selectedQty, setSelectedQty] = useState({});
+
+  // Admin / add-edit form
   const [adminPassword, setAdminPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
 
-  // Admin form
-  const [name, setName] = useState('');
-  const [image, setImage] = useState('');
-  const [category, setCategory] = useState('');
-  const [details, setDetails] = useState('');
-  const [buyurl, setBuyurl] = useState('');
-  const [price, setPrice] = useState('');
-  const [showInVip, setShowInVip] = useState(false);
+  const [form, setForm] = useState({
+    id: null,
+    name: '',
+    image: '',
+    category: '',
+    details: '',
+    buyurl: '',
+    price: '',
+    isVip: false,
+    available_count: 1 // cuántos hay disponibles
+  });
 
-  const CORRECT_PASSWORD = 'Juanchoesgey';
-
-  // =====================
-  // Cargar regalos
-  // =====================
+  // Load gifts and selections
   const loadGifts = async () => {
-    const res = await fetch(`${API_URL}/api/gifts`);
-    const data = await res.json();
-    setGifts(data);
+    try {
+      const res = await fetch(`${API_URL}/api/gifts`);
+      if (!res.ok) throw new Error('error fetching gifts');
+      const data = await res.json();
+      // expect gifts to have: id, name, image, category, details, buyurl, price, is_vip, available_count
+      setGifts(data);
+    } catch (err) {
+      console.error(err);
+      // keep empty array
+    }
+  };
+
+  const loadSelections = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/selections`);
+      if (!res.ok) throw new Error('error fetching selections');
+      const data = await res.json();
+      setSelections(data);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   useEffect(() => {
     loadGifts();
+    loadSelections();
   }, []);
 
+  // Helpers
+  const vipGifts = gifts.filter(g => g.is_vip);
+  const normalGifts = gifts.filter(g => !g.is_vip);
+
+  // For a gift determine how many have already been selected (reserved)
+  const reservedCountFor = (giftId) => selections
+    .filter(s => s.giftId === giftId)
+    .reduce((sum, s) => sum + (s.qty || 0), 0);
+
   // =====================
-  // Validar contraseña
+  // ADMIN PASSWORD
   // =====================
   const handlePasswordSubmit = () => {
     if (adminPassword === CORRECT_PASSWORD) {
@@ -50,1630 +88,517 @@ function App() {
   };
 
   // =====================
-  // Agregar regalo
+  // CRUD: agregar, actualizar, eliminar regalo
   // =====================
   const addGift = async () => {
     try {
+      const payload = {
+        name: form.name,
+        image: form.image,
+        category: form.category,
+        details: form.details,
+        buyurl: form.buyurl,
+        price: form.price,
+        is_vip: !!form.isVip,
+        available_count: Number(form.available_count) || 1
+      };
       const res = await fetch(`${API_URL}/api/gifts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          image,
-          category,
-          details,
-          buyurl,
-          price,
-          isVip: showInVip
-        })
+        body: JSON.stringify(payload)
       });
+      if (!res.ok) throw new Error('error creating');
+      await loadGifts();
+      setForm({ id: null, name: '', image: '', category: '', details: '', buyurl: '', price: '', isVip: false, available_count: 1 });
+    } catch (err) {
+      console.error(err);
+      alert('Error creando regalo');
+    }
+  };
 
+  const updateGift = async () => {
+    try {
+      if (!form.id) return;
+      const payload = {
+        name: form.name,
+        image: form.image,
+        category: form.category,
+        details: form.details,
+        buyurl: form.buyurl,
+        price: form.price,
+        is_vip: !!form.isVip,
+        available_count: Number(form.available_count) || 1
+      };
+      const res = await fetch(`${API_URL}/api/gifts/${form.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error('error updating');
+      await loadGifts();
+      await loadSelections();
+      setForm({ id: null, name: '', image: '', category: '', details: '', buyurl: '', price: '', isVip: false, available_count: 1 });
+    } catch (err) {
+      console.error(err);
+      alert('Error actualizando regalo');
+    }
+  };
+
+  const deleteGift = async (id) => {
+    if (!confirm('¿Eliminar regalo? Esta acción es irreversible.')) return;
+    try {
+      const res = await fetch(`${API_URL}/api/gifts/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('error deleting');
+      await loadGifts();
+      await loadSelections();
+    } catch (err) {
+      console.error(err);
+      alert('Error eliminando regalo');
+    }
+  };
+
+  // Admin: cargar regalo en formulario para editar
+  const editGift = (g) => {
+    setForm({
+      id: g.id,
+      name: g.name || '',
+      image: g.image || '',
+      category: g.category || '',
+      details: g.details || '',
+      buyurl: g.buyurl || '',
+      price: g.price || '',
+      isVip: !!g.is_vip,
+      available_count: g.available_count ?? 1
+    });
+    // keep admin view
+  };
+
+  // =====================
+  // SELECCIÓN USUARIO
+  // =====================
+  // modificar cantidad local seleccionada
+  const setSelectedQuantity = (giftId, qty) => {
+    setSelectedQty(prev => {
+      const next = { ...prev };
+      if (!qty || qty <= 0) {
+        delete next[giftId];
+      } else {
+        next[giftId] = qty;
+      }
+      return next;
+    });
+  };
+
+  // increment/decrement with limit checks
+  const incSelected = (gift) => {
+    const reserved = reservedCountFor(gift.id);
+    const available = (gift.available_count ?? 1) - reserved;
+    const current = selectedQty[gift.id] || 0;
+    if (current < available) setSelectedQuantity(gift.id, current + 1);
+  };
+  const decSelected = (gift) => {
+    const current = selectedQty[gift.id] || 0;
+    if (current > 1) setSelectedQuantity(gift.id, current - 1);
+    else setSelectedQuantity(gift.id, 0);
+  };
+
+  // Confirmar selección -> enviar al servidor
+  const confirmSelection = async () => {
+    const items = Object.entries(selectedQty).map(([id, qty]) => ({ giftId: Number(id), qty: Number(qty) }));
+    if (items.length === 0) return alert('No seleccionaste nada');
+    if (!userName || !userName.trim()) return alert('Ingresa tu nombre antes de confirmar');
+
+    try {
+      const res = await fetch(`${API_URL}/api/selections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userName: userName.trim(), items })
+      });
       if (!res.ok) {
-        throw new Error('Error al crear regalo');
+        const text = await res.text();
+        throw new Error(text || 'error posting selections');
       }
 
-      setName('');
-      setImage('');
-      setCategory('');
-      setDetails('');
-      setBuyurl('');
-      setPrice('');
-      setShowInVip(false);
-
-      loadGifts();
+      // server should update gift available_count or create selection records
+      await loadGifts();
+      await loadSelections();
+      setSelectedQty({});
+      alert('Selección registrada. Gracias!');
     } catch (err) {
-      alert('Error al crear regalo');
       console.error(err);
+      alert('Error al confirmar selección. Es posible que no haya stock suficiente.');
+      // reload to reflect server state
+      await loadGifts();
+      await loadSelections();
+    }
+  };
+
+  // Admin: manually adjust available_count for a gift (quick inline update)
+  const setAvailableCount = async (giftId, newCount) => {
+    try {
+      const res = await fetch(`${API_URL}/api/gifts/${giftId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ available_count: Number(newCount) })
+      });
+      if (!res.ok) throw new Error('error');
+      await loadGifts();
+    } catch (err) {
+      console.error(err);
+      alert('No se pudo actualizar la cantidad disponible');
     }
   };
 
   // =====================
-  // Seleccionar regalo
+  // UI: vistas
   // =====================
-  const toggleGiftSelection = (giftId) => {
-    setSelectedGifts(prev =>
-      prev.includes(giftId)
-        ? prev.filter(id => id !== giftId)
-        : [...prev, giftId]
-    );
-  };
 
-  // =====================
-  // Separar regalos
-  // =====================
-  const vipGifts = gifts.filter(g => g.is_vip);
-  const normalGifts = gifts.filter(g => !g.is_vip);
-  const selectedGiftDetails = gifts.filter(g => selectedGifts.includes(g.id));
-
-  // =====================
-  // PANTALLA 1: INGRESAR NOMBRE
-  // =====================
+  // PANTALLA NOMBRE
   if (currentStep === 'name') {
     return (
-      <div
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background:
-            'radial-gradient(circle at top, #f97316 0, #0f172a 45%, #020617 100%)',
-          padding: 16,
-          fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
-        }}
-      >
-        <div
-          style={{
-            width: '100%',
-            maxWidth: 420,
-            background: 'rgba(15,23,42,0.95)',
-            borderRadius: 20,
-            padding: 40,
-            boxShadow:
-              '0 20px 40px rgba(15,23,42,0.7), 0 0 0 1px rgba(148,163,184,0.2)',
-            backdropFilter: 'blur(14px)',
-            textAlign: 'center'
-          }}
-        >
-          <h1
-            style={{
-              fontSize: 32,
-              marginBottom: 8,
-              color: '#f9fafb'
-            }}
-          >
-            🎄 ¡Bienvenido!
-          </h1>
-
-          <p
-            style={{
-              fontSize: 15,
-              color: '#9ca3af',
-              marginBottom: 32
-            }}
-          >
-            Ingresa tu nombre para comenzar a seleccionar tus regalos favoritos.
-          </p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-orange-400 via-slate-900 to-black p-6">
+        <div className="w-full max-w-md bg-slate-900/95 rounded-2xl p-10 shadow-xl text-center">
+          <h1 className="text-3xl text-white mb-2">Bienvenido</h1>
+          <p className="text-sm text-slate-300 mb-6">Ingresa tu nombre para comenzar a seleccionar regalos.</p>
 
           <input
+            className="w-full p-3 rounded-lg bg-slate-800 text-white border border-slate-700 mb-4"
             placeholder="Tu nombre"
             value={userName}
             onChange={e => setUserName(e.target.value)}
-            onKeyPress={e => {
-              if (e.key === 'Enter' && userName.trim()) {
-                setCurrentStep('selection');
-              }
-            }}
-            style={{
-              width: '100%',
-              padding: '12px 16px',
-              borderRadius: 12,
-              border: '1px solid #4b5563',
-              background: '#020617',
-              color: '#e5e7eb',
-              fontSize: 16,
-              outline: 'none',
-              marginBottom: 20,
-              boxSizing: 'border-box'
-            }}
+            onKeyDown={e => { if (e.key === 'Enter' && userName.trim()) setCurrentStep('selection'); }}
           />
 
           <button
-            onClick={() => {
-              if (userName.trim()) {
-                setCurrentStep('selection');
-              }
-            }}
-            style={{
-              width: '100%',
-              padding: '12px 16px',
-              borderRadius: 999,
-              border: 'none',
-              background:
-                'linear-gradient(135deg, #f97316, #ec4899, #6366f1)',
-              color: '#f9fafb',
-              fontWeight: 600,
-              fontSize: 16,
-              cursor: userName.trim() ? 'pointer' : 'not-allowed',
-              boxShadow: '0 12px 30px rgba(249,115,22,0.55)',
-              opacity: userName.trim() ? 1 : 0.5,
-              transition: 'transform 0.1s ease'
-            }}
-            onMouseDown={e => {
-              if (userName.trim()) {
-                e.currentTarget.style.transform = 'translateY(1px) scale(0.99)';
-              }
-            }}
-            onMouseUp={e => {
-              e.currentTarget.style.transform = 'translateY(0) scale(1)';
-            }}
-            disabled={!userName.trim()}
-          >
-            Continuar →
+            onClick={() => { if (userName.trim()) setCurrentStep('selection'); }}
+            className={`w-full py-3 rounded-full text-white font-semibold ${userName.trim() ? 'bg-gradient-to-r from-orange-500 to-pink-500 shadow' : 'opacity-60'}`}>
+            Continuar
           </button>
 
           <button
             onClick={() => setCurrentStep('adminPassword')}
-            style={{
-              marginTop: 20,
-              width: '100%',
-              padding: '10px 16px',
-              borderRadius: 10,
-              border: '1px solid rgba(148,163,184,0.3)',
-              background: 'rgba(15,23,42,0.6)',
-              color: '#9ca3af',
-              fontWeight: 500,
-              fontSize: 14,
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = 'rgba(148,163,184,0.1)';
-              e.currentTarget.style.color = '#e5e7eb';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'rgba(15,23,42,0.6)';
-              e.currentTarget.style.color = '#9ca3af';
-            }}
-          >
-            Panel Admin ⚙️
-          </button>
+            className="mt-3 w-full py-2 rounded-lg border border-slate-700 text-slate-300"
+          >Panel Admin</button>
         </div>
       </div>
     );
   }
 
-  // =====================
-  // PANTALLA 1.5: CONTRASEÑA ADMIN
-  // =====================
+  // PANTALLA CONTRASEÑA ADMIN
   if (currentStep === 'adminPassword') {
     return (
-      <div
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background:
-            'radial-gradient(circle at top, #f97316 0, #0f172a 45%, #020617 100%)',
-          padding: 16,
-          fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
-        }}
-      >
-        <div
-          style={{
-            width: '100%',
-            maxWidth: 420,
-            background: 'rgba(15,23,42,0.95)',
-            borderRadius: 20,
-            padding: 40,
-            boxShadow:
-              '0 20px 40px rgba(15,23,42,0.7), 0 0 0 1px rgba(148,163,184,0.2)',
-            backdropFilter: 'blur(14px)',
-            textAlign: 'center'
-          }}
-        >
-          <h1
-            style={{
-              fontSize: 32,
-              marginBottom: 8,
-              color: '#f9fafb'
-            }}
-          >
-            🔐 Panel Admin
-          </h1>
-
-          <p
-            style={{
-              fontSize: 15,
-              color: '#9ca3af',
-              marginBottom: 32
-            }}
-          >
-            ¿QUE BUSCAS? 🤔
-          </p>
-
-          <div
-            style={{
-              marginBottom: 20
-            }}
-          >
-            <input
-              type="password"
-              placeholder="Contraseña"
-              value={adminPassword}
-              onChange={e => {
-                setAdminPassword(e.target.value);
-                setPasswordError('');
-              }}
-              onKeyPress={e => {
-                if (e.key === 'Enter') {
-                  handlePasswordSubmit();
-                }
-              }}
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                borderRadius: 12,
-                border: passwordError ? '2px solid #ef4444' : '1px solid #4b5563',
-                background: '#020617',
-                color: '#e5e7eb',
-                fontSize: 16,
-                outline: 'none',
-                boxSizing: 'border-box',
-                transition: 'border-color 0.2s'
-              }}
-            />
-
-            {passwordError && (
-              <p
-                style={{
-                  color: '#ef4444',
-                  fontSize: 13,
-                  marginTop: 8,
-                  margin: '8px 0 0 0'
-                }}
-              >
-                {passwordError}
-              </p>
-            )}
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-orange-400 via-slate-900 to-black p-6">
+        <div className="w-full max-w-md bg-slate-900/95 rounded-2xl p-10 shadow-xl text-center">
+          <h1 className="text-2xl text-white mb-2">Panel Admin</h1>
+          <p className="text-sm text-slate-300 mb-6">Introduce la contraseña para acceder.</p>
+          <input
+            type="password"
+            className="w-full p-3 rounded-lg bg-slate-800 text-white border border-slate-700 mb-4"
+            placeholder="Contraseña"
+            value={adminPassword}
+            onChange={e => { setAdminPassword(e.target.value); setPasswordError(''); }}
+            onKeyDown={e => { if (e.key === 'Enter') handlePasswordSubmit(); }}
+          />
+          {passwordError && <div className="text-red-400 mb-2">{passwordError}</div>}
+          <div className="flex gap-2">
+            <button onClick={handlePasswordSubmit} className="flex-1 py-2 rounded-full bg-gradient-to-r from-orange-500 to-pink-500 text-white">Acceder</button>
+            <button onClick={() => setCurrentStep('name')} className="flex-1 py-2 rounded-lg border border-slate-700 text-slate-300">Volver</button>
           </div>
-
-          <button
-            onClick={handlePasswordSubmit}
-            style={{
-              width: '100%',
-              padding: '12px 16px',
-              borderRadius: 999,
-              border: 'none',
-              background:
-                'linear-gradient(135deg, #f97316, #ec4899, #6366f1)',
-              color: '#f9fafb',
-              fontWeight: 600,
-              fontSize: 16,
-              cursor: 'pointer',
-              boxShadow: '0 12px 30px rgba(249,115,22,0.55)',
-              transition: 'transform 0.1s ease'
-            }}
-            onMouseDown={e => {
-              e.currentTarget.style.transform = 'translateY(1px) scale(0.99)';
-            }}
-            onMouseUp={e => {
-              e.currentTarget.style.transform = 'translateY(0) scale(1)';
-            }}
-          >
-            Acceder →
-          </button>
-
-          <button
-            onClick={() => {
-              setCurrentStep('name');
-              setAdminPassword('');
-              setPasswordError('');
-            }}
-            style={{
-              marginTop: 20,
-              width: '100%',
-              padding: '10px 16px',
-              borderRadius: 10,
-              border: '1px solid rgba(148,163,184,0.3)',
-              background: 'rgba(15,23,42,0.6)',
-              color: '#9ca3af',
-              fontWeight: 500,
-              fontSize: 14,
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = 'rgba(148,163,184,0.1)';
-              e.currentTarget.style.color = '#e5e7eb';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'rgba(15,23,42,0.6)';
-              e.currentTarget.style.color = '#9ca3af';
-            }}
-          >
-            ← Volver
-          </button>
         </div>
       </div>
     );
   }
 
-  // =====================
-  // PANTALLA 2: SELECCIONAR REGALOS
-  // =====================
+  // PANTALLA VIP (separada)
+  if (currentStep === 'vip') {
+    return (
+      <div className="min-h-screen p-8 bg-gradient-to-b from-orange-400 via-slate-900 to-black text-white">
+        <div className="max-w-5xl mx-auto">
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-2xl">Zona VIP</h1>
+            <div className="flex gap-2">
+              <button onClick={() => setCurrentStep('selection')} className="py-2 px-3 rounded bg-slate-800/80">Volver</button>
+              <button onClick={() => { setCurrentStep('adminPassword'); }} className="py-2 px-3 rounded bg-slate-800/60">Admin</button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {vipGifts.length === 0 && <div className="text-slate-300">No hay regalos VIP</div>}
+            {vipGifts.map(g => {
+              const reserved = reservedCountFor(g.id);
+              const available = (g.available_count ?? 1) - reserved;
+              const selected = selectedQty[g.id] || 0;
+              const isTachado = reserved > 0; // alguien ya lo seleccionó
+
+              return (
+                <div key={g.id} className={`p-4 rounded-lg bg-slate-900/90 border ${isTachado ? 'line-through opacity-60' : 'border-yellow-400/30'}`}>
+                  {g.image && <img src={g.image} alt="" className="w-full h-36 object-cover rounded mb-2" />}
+                  <h3 className="font-semibold">{g.name}</h3>
+                  <div className="text-sm text-slate-300 mb-2">{g.category}</div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <button onClick={() => decSelected(g)} className="px-2 py-1 rounded bg-slate-700">-</button>
+                    <div className="w-8 text-center">{selected}</div>
+                    <button onClick={() => incSelected(g)} className="px-2 py-1 rounded bg-slate-700">+</button>
+                    <div className="ml-auto text-sm">Disp: {available}</div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => confirmSelection()} className="flex-1 py-2 rounded bg-gradient-to-r from-orange-500 to-pink-500">Confirmar</button>
+                    <button onClick={() => setSelectedQty(prev => { const next = { ...prev }; delete next[g.id]; return next; })} className="py-2 px-3 rounded border">Limpiar</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // PANTALLA SELECCION (principal)
   if (currentStep === 'selection') {
     return (
-      <div
-        style={{
-          minHeight: '100vh',
-          padding: '40px 16px',
-          background:
-            'radial-gradient(circle at top, #f97316 0, #0f172a 45%, #020617 100%)',
-          fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
-          color: '#e5e7eb'
-        }}
-      >
-        <div
-          style={{
-            maxWidth: 1200,
-            margin: '0 auto'
-          }}
-        >
-          {/* Header */}
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: 32
-            }}
-          >
-            <div>
-              <h1
-                style={{
-                  fontSize: 32,
-                  marginBottom: 4
-                }}
-              >
-                👋 ¡Hola, {userName}!
-              </h1>
-              <p
-                style={{
-                  fontSize: 16,
-                  color: '#9ca3af'
-                }}
-              >
-                Selecciona los regalos que te gustaría recibir
-              </p>
+      <div className="min-h-screen p-8 bg-gradient-to-b from-orange-400 via-slate-900 to-black text-white">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h1 className="text-2xl">Hola, {userName}</h1>
+                <p className="text-slate-300">Selecciona los regalos que te gustaría recibir.</p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => { setSelectedQty({}); setUserName(''); setCurrentStep('name'); }} className="py-2 px-3 rounded border">Cambiar nombre</button>
+                <button onClick={() => setCurrentStep('vip')} className="py-2 px-3 rounded bg-yellow-400 text-black font-semibold">Ver zona VIP</button>
+                <button onClick={() => setCurrentStep('adminPassword')} className="py-2 px-3 rounded border">Admin</button>
+              </div>
             </div>
 
-            <button
-              onClick={() => {
-                setCurrentStep('name');
-                setUserName('');
-                setSelectedGifts([]);
-              }}
-              style={{
-                padding: '8px 16px',
-                borderRadius: 10,
-                border: '1px solid rgba(148,163,184,0.3)',
-                background: 'rgba(15,23,42,0.6)',
-                color: '#9ca3af',
-                fontWeight: 500,
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = 'rgba(148,163,184,0.1)';
-                e.currentTarget.style.color = '#e5e7eb';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = 'rgba(15,23,42,0.6)';
-                e.currentTarget.style.color = '#9ca3af';
-              }}
-            >
-              ← Cambiar nombre
-            </button>
-          </div>
+            {/* VIP section inline preview */}
+            <div className="mb-6">
+              <h2 className="text-lg">👑 Regalos VIP</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-3">
+                {vipGifts.length === 0 && <div className="text-slate-400">No hay regalos VIP</div>}
+                {vipGifts.map(g => {
+                  const reserved = reservedCountFor(g.id);
+                  const available = (g.available_count ?? 1) - reserved;
+                  const selected = selectedQty[g.id] || 0;
+                  const isTachado = reserved > 0;
 
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1fr) minmax(300px, 380px)',
-              gap: 24
-            }}
-          >
-            {/* Zona de regalos disponibles */}
-            <div>
-              {/* VIP Section */}
-              <section
-                style={{
-                  background:
-                    'linear-gradient(135deg, rgba(250,204,21,0.12), rgba(15,23,42,0.95))',
-                  borderRadius: 16,
-                  padding: 18,
-                  border: '1px solid rgba(250,204,21,0.3)',
-                  boxShadow: '0 18px 30px rgba(15,23,42,0.65)',
-                  marginBottom: 20
-                }}
-              >
-                <h2
-                  style={{
-                    fontSize: 18,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    marginBottom: 14
-                  }}
-                >
-                  👑 Regalos VIP
-                </h2>
-
-                {vipGifts.length === 0 ? (
-                  <p
-                    style={{
-                      fontSize: 13,
-                      color: '#9ca3af'
-                    }}
-                  >
-                    No hay regalos VIP disponibles
-                  </p>
-                ) : (
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns:
-                        'repeat(auto-fill, minmax(160px, 1fr))',
-                      gap: 12
-                    }}
-                  >
-                    {vipGifts.map(g => (
-                      <div
-                        key={g.id}
-                        onClick={() => toggleGiftSelection(g.id)}
-                        style={{
-                          background: selectedGifts.includes(g.id)
-                            ? 'rgba(250,204,21,0.2)'
-                            : 'rgba(15,23,42,0.95)',
-                          border: selectedGifts.includes(g.id)
-                            ? '2px solid #facc15'
-                            : '1px solid rgba(250,204,21,0.3)',
-                          borderRadius: 14,
-                          padding: 12,
-                          cursor: 'pointer',
-                          transition: 'all 0.2s',
-                          position: 'relative'
-                        }}
-                        onMouseEnter={e => {
-                          e.currentTarget.style.transform =
-                            'translateY(-4px)';
-                          e.currentTarget.style.boxShadow =
-                            '0 12px 24px rgba(250,204,21,0.2)';
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.transform = 'translateY(0)';
-                          e.currentTarget.style.boxShadow = 'none';
-                        }}
-                      >
-                        {selectedGifts.includes(g.id) && (
-                          <div
-                            style={{
-                              position: 'absolute',
-                              top: 8,
-                              right: 8,
-                              width: 24,
-                              height: 24,
-                              background: '#facc15',
-                              borderRadius: '50%',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: 14,
-                              fontWeight: 'bold',
-                              color: '#000'
-                            }}
-                          >
-                            ✓
+                  return (
+                    <div key={g.id} className={`p-3 rounded-lg bg-slate-900/90 border ${isTachado ? 'line-through opacity-60' : 'border-yellow-400/20'}`}>
+                      {g.image && <img src={g.image} className="w-full h-28 object-cover rounded mb-2" />}
+                      <div className="flex items-start gap-2">
+                        <div style={{flex:1}}>
+                          <div className="font-semibold">{g.name}</div>
+                          <div className="text-sm text-slate-300">{g.category}</div>
+                          <div className="text-sm mt-1">Disp: {available}</div>
+                        </div>
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => decSelected(g)} className="px-2 py-1 rounded bg-slate-700">-</button>
+                            <div className="w-8 text-center">{selected}</div>
+                            <button onClick={() => incSelected(g)} className="px-2 py-1 rounded bg-slate-700">+</button>
                           </div>
-                        )}
-
-                        {g.image && (
-                          <img
-                            src={g.image}
-                            alt={g.name}
-                            style={{
-                              width: '100%',
-                              height: 100,
-                              borderRadius: 10,
-                              objectFit: 'cover',
-                              marginBottom: 8,
-                              border: '1px solid rgba(250,204,21,0.3)'
-                            }}
-                          />
-                        )}
-
-                        <h3
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 600,
-                            color: '#fef9c3',
-                            marginBottom: 4,
-                            minHeight: 36,
-                            display: 'flex',
-                            alignItems: 'center'
-                          }}
-                        >
-                          {g.name}
-                        </h3>
-
-                        {g.category && (
-                          <span
-                            style={{
-                              fontSize: 11,
-                              color: '#e5e7eb',
-                              opacity: 0.8,
-                              display: 'block',
-                              marginBottom: 6
-                            }}
-                          >
-                            {g.category}
-                          </span>
-                        )}
-
-                        {g.price && (
-                          <span
-                            style={{
-                              fontSize: 13,
-                              fontWeight: 600,
-                              color: '#facc15'
-                            }}
-                          >
-                            ${g.price}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              {/* Normales Section */}
-              <section
-                style={{
-                  background: 'rgba(15,23,42,0.96)',
-                  borderRadius: 16,
-                  padding: 18,
-                  border: '1px solid rgba(148,163,184,0.4)',
-                  boxShadow: '0 18px 30px rgba(15,23,42,0.7)'
-                }}
-              >
-                <h2
-                  style={{
-                    fontSize: 18,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    marginBottom: 14
-                  }}
-                >
-                  🎁 Regalos disponibles
-                </h2>
-
-                {normalGifts.length === 0 ? (
-                  <p
-                    style={{
-                      fontSize: 13,
-                      color: '#9ca3af'
-                    }}
-                  >
-                    No hay regalos disponibles
-                  </p>
-                ) : (
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns:
-                        'repeat(auto-fill, minmax(160px, 1fr))',
-                      gap: 12
-                    }}
-                  >
-                    {normalGifts.map(g => (
-                      <div
-                        key={g.id}
-                        onClick={() => toggleGiftSelection(g.id)}
-                        style={{
-                          background: selectedGifts.includes(g.id)
-                            ? 'rgba(34,197,94,0.15)'
-                            : 'rgba(15,23,42,0.98)',
-                          border: selectedGifts.includes(g.id)
-                            ? '2px solid #22c55e'
-                            : '1px solid rgba(31,41,55,1)',
-                          borderRadius: 14,
-                          padding: 12,
-                          cursor: 'pointer',
-                          transition: 'all 0.2s',
-                          position: 'relative'
-                        }}
-                        onMouseEnter={e => {
-                          e.currentTarget.style.transform =
-                            'translateY(-4px)';
-                          e.currentTarget.style.boxShadow =
-                            '0 12px 24px rgba(34,197,94,0.15)';
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.transform = 'translateY(0)';
-                          e.currentTarget.style.boxShadow = 'none';
-                        }}
-                      >
-                        {selectedGifts.includes(g.id) && (
-                          <div
-                            style={{
-                              position: 'absolute',
-                              top: 8,
-                              right: 8,
-                              width: 24,
-                              height: 24,
-                              background: '#22c55e',
-                              borderRadius: '50%',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: 14,
-                              fontWeight: 'bold',
-                              color: '#000'
-                            }}
-                          >
-                            ✓
-                          </div>
-                        )}
-
-                        {g.image && (
-                          <img
-                            src={g.image}
-                            alt={g.name}
-                            style={{
-                              width: '100%',
-                              height: 100,
-                              borderRadius: 10,
-                              objectFit: 'cover',
-                              marginBottom: 8,
-                              border: '1px solid rgba(31,41,55,1)'
-                            }}
-                          />
-                        )}
-
-                        <h3
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 500,
-                            color: '#f9fafb',
-                            marginBottom: 4,
-                            minHeight: 36,
-                            display: 'flex',
-                            alignItems: 'center'
-                          }}
-                        >
-                          {g.name}
-                        </h3>
-
-                        {g.category && (
-                          <span
-                            style={{
-                              fontSize: 11,
-                              color: '#9ca3af',
-                              display: 'block',
-                              marginBottom: 6
-                            }}
-                          >
-                            {g.category}
-                          </span>
-                        )}
-
-                        {g.price && (
-                          <span
-                            style={{
-                              fontSize: 13,
-                              fontWeight: 600,
-                              color: '#22c55e'
-                            }}
-                          >
-                            ${g.price}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
-            </div>
-
-            {/* Zona seleccionados - Sidebar */}
-            <aside
-              style={{
-                background: 'rgba(15,23,42,0.95)',
-                borderRadius: 16,
-                padding: 20,
-                border: '1px solid rgba(148,163,184,0.2)',
-                boxShadow: '0 18px 30px rgba(15,23,42,0.65)',
-                height: 'fit-content',
-                position: 'sticky',
-                top: 20
-              }}
-            >
-              <h2
-                style={{
-                  fontSize: 18,
-                  marginBottom: 4
-                }}
-              >
-                ✨ Mis deseos
-              </h2>
-
-              <p
-                style={{
-                  fontSize: 12,
-                  color: '#9ca3af',
-                  marginBottom: 16
-                }}
-              >
-                {selectedGifts.length} regalo{selectedGifts.length !== 1 ? 's' : ''} seleccionado{selectedGifts.length !== 1 ? 's' : ''}
-              </p>
-
-              <div
-                style={{
-                  maxHeight: '60vh',
-                  overflowY: 'auto',
-                  paddingRight: 8,
-                  marginBottom: 16
-                }}
-              >
-                {selectedGiftDetails.length === 0 ? (
-                  <p
-                    style={{
-                      fontSize: 13,
-                      color: '#6b7280',
-                      textAlign: 'center',
-                      paddingTop: 20
-                    }}
-                  >
-                    Selecciona regalos haciendo clic en ellos
-                  </p>
-                ) : (
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 10
-                    }}
-                  >
-                    {selectedGiftDetails.map(g => (
-                      <div
-                        key={g.id}
-                        onClick={() => toggleGiftSelection(g.id)}
-                        style={{
-                          background: g.is_vip
-                            ? 'rgba(250,204,21,0.12)'
-                            : 'rgba(34,197,94,0.12)',
-                          border: g.is_vip
-                            ? '1px solid rgba(250,204,21,0.3)'
-                            : '1px solid rgba(34,197,94,0.3)',
-                          borderRadius: 10,
-                          padding: 10,
-                          cursor: 'pointer',
-                          transition: 'all 0.2s'
-                        }}
-                        onMouseEnter={e => {
-                          e.currentTarget.style.background = g.is_vip
-                            ? 'rgba(250,204,21,0.2)'
-                            : 'rgba(34,197,94,0.2)';
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.background = g.is_vip
-                            ? 'rgba(250,204,21,0.12)'
-                            : 'rgba(34,197,94,0.12)';
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: 'flex',
-                            gap: 8,
-                            alignItems: 'flex-start'
-                          }}
-                        >
-                          {g.image && (
-                            <img
-                              src={g.image}
-                              alt={g.name}
-                              style={{
-                                width: 40,
-                                height: 40,
-                                borderRadius: 8,
-                                objectFit: 'cover',
-                                flexShrink: 0
-                              }}
-                            />
-                          )}
-
-                          <div style={{ minWidth: 0, flex: 1 }}>
-                            <h4
-                              style={{
-                                fontSize: 12,
-                                fontWeight: 600,
-                                color: g.is_vip ? '#fef9c3' : '#e5e7eb',
-                                marginBottom: 2,
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis'
-                              }}
-                            >
-                              {g.is_vip && '👑 '}
-                              {g.name}
-                            </h4>
-
-                            {g.price && (
-                              <span
-                                style={{
-                                  fontSize: 11,
-                                  color: g.is_vip
-                                    ? '#facc15'
-                                    : '#22c55e',
-                                  fontWeight: 500
-                                }}
-                              >
-                                ${g.price}
-                              </span>
-                            )}
-                          </div>
-
-                          <button
-                            onClick={e => {
-                              e.stopPropagation();
-                              toggleGiftSelection(g.id);
-                            }}
-                            style={{
-                              background: 'rgba(239,68,68,0.8)',
-                              border: 'none',
-                              borderRadius: 6,
-                              color: '#fff',
-                              width: 24,
-                              height: 24,
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: 12,
-                              flexShrink: 0,
-                              transition: 'all 0.2s'
-                            }}
-                            onMouseEnter={e => {
-                              e.currentTarget.style.background =
-                                'rgba(239,68,68,1)';
-                            }}
-                            onMouseLeave={e => {
-                              e.currentTarget.style.background =
-                                'rgba(239,68,68,0.8)';
-                            }}
-                          >
-                            ✕
-                          </button>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    </div>
+                  );
+                })}
               </div>
+            </div>
 
-              <div
-                style={{
-                  borderTop: '1px solid rgba(148,163,184,0.2)',
-                  paddingTop: 12,
-                  marginBottom: 12
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    fontSize: 14,
-                    marginBottom: 8
-                  }}
-                >
-                  <span style={{ color: '#9ca3af' }}>Total estimado:</span>
-                  <span style={{ fontWeight: 600, color: '#f9fafb' }}>
-                    ${selectedGiftDetails.reduce((sum, g) => sum + (parseFloat(g.price) || 0), 0).toFixed(2)}
-                  </span>
-                </div>
+            {/* Normal gifts */}
+            <section>
+              <h2 className="text-lg">🎁 Regalos disponibles</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-3">
+                {normalGifts.length === 0 && <div className="text-slate-400">No hay regalos disponibles</div>}
+                {normalGifts.map(g => {
+                  const reserved = reservedCountFor(g.id);
+                  const available = (g.available_count ?? 1) - reserved;
+                  const selected = selectedQty[g.id] || 0;
+                  const isTachado = reserved > 0;
+
+                  return (
+                    <div key={g.id} className={`p-3 rounded-lg bg-slate-900/95 border ${isTachado ? 'line-through opacity-60' : 'border-slate-800'}`}>
+                      {g.image && <img src={g.image} className="w-full h-28 object-cover rounded mb-2" />}
+                      <div className="flex items-start gap-2">
+                        <div style={{flex:1}}>
+                          <div className="font-semibold">{g.name}</div>
+                          <div className="text-sm text-slate-300">{g.category}</div>
+                          <div className="text-sm mt-1">Disp: {available}</div>
+                        </div>
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => decSelected(g)} className="px-2 py-1 rounded bg-slate-700">-</button>
+                            <div className="w-8 text-center">{selected}</div>
+                            <button onClick={() => incSelected(g)} className="px-2 py-1 rounded bg-slate-700">+</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-
-              <button
-                onClick={() => {
-                  alert(`${userName} desea estos ${selectedGifts.length} regalo(s)\n\n${selectedGiftDetails.map(g => `- ${g.name} ($${g.price})`).join('\n')}`);
-                }}
-                style={{
-                  width: '100%',
-                  padding: '10px 14px',
-                  borderRadius: 10,
-                  border: 'none',
-                  background: 'linear-gradient(135deg, #f97316, #ec4899)',
-                  color: '#f9fafb',
-                  fontWeight: 600,
-                  fontSize: 14,
-                  cursor: selectedGifts.length > 0 ? 'pointer' : 'not-allowed',
-                  opacity: selectedGifts.length > 0 ? 1 : 0.5,
-                  transition: 'all 0.2s'
-                }}
-                disabled={selectedGifts.length === 0}
-                onMouseDown={e => {
-                  if (selectedGifts.length > 0) {
-                    e.currentTarget.style.transform = 'scale(0.98)';
-                  }
-                }}
-                onMouseUp={e => {
-                  e.currentTarget.style.transform = 'scale(1)';
-                }}
-              >
-                📤 Confirmar lista
-              </button>
-
-              <button
-                onClick={() => {
-                  setSelectedGifts([]);
-                }}
-                style={{
-                  width: '100%',
-                  marginTop: 8,
-                  padding: '8px 14px',
-                  borderRadius: 10,
-                  border: '1px solid rgba(148,163,184,0.3)',
-                  background: 'rgba(15,23,42,0.6)',
-                  color: '#9ca3af',
-                  fontWeight: 500,
-                  fontSize: 13,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(148,163,184,0.1)';
-                  e.currentTarget.style.color = '#e5e7eb';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(15,23,42,0.6)';
-                  e.currentTarget.style.color = '#9ca3af';
-                }}
-              >
-                Limpiar selección
-              </button>
-            </aside>
+            </section>
           </div>
+
+          {/* Sidebar: mi selección */}
+          <aside className="bg-slate-900/95 rounded-lg p-4">
+            <h3 className="text-lg">Mis deseos</h3>
+            <p className="text-sm text-slate-300">{Object.keys(selectedQty).length} artículo(s) seleccionado(s)</p>
+
+            <div className="mt-3 space-y-2 max-h-80 overflow-auto">
+              {Object.keys(selectedQty).length === 0 && <div className="text-slate-400">Selecciona artículos haciendo clic en +</div>}
+              {Object.entries(selectedQty).map(([id, qty]) => {
+                const gift = gifts.find(g => g.id === Number(id)) || { name: 'Objeto eliminado' };
+                return (
+                  <div key={id} className="flex items-center gap-2 bg-slate-800/60 p-2 rounded">
+                    <div className="flex-1">
+                      <div className="font-medium">{gift.name}</div>
+                      <div className="text-sm text-slate-300">Cantidad: {qty}</div>
+                    </div>
+                    <div className="flex gap-1">
+                      <button onClick={() => setSelectedQuantity(Number(id), Number(qty) - 1)} className="px-2 py-1 rounded bg-red-600">-</button>
+                      <button onClick={() => setSelectedQuantity(Number(id), Number(qty) + 1)} className="px-2 py-1 rounded bg-green-600">+</button>
+                      <button onClick={() => { const next = { ...selectedQty }; delete next[id]; setSelectedQty(next); }} className="px-2 py-1 rounded border">x</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-4">
+              <div className="flex justify-between text-sm mb-2">
+                <span>Total items</span>
+                <span>{Object.values(selectedQty).reduce((s, v) => s + Number(v), 0)}</span>
+              </div>
+
+              <button onClick={confirmSelection} className="w-full py-2 rounded bg-gradient-to-r from-orange-500 to-pink-500">📤 Confirmar lista</button>
+              <button onClick={() => setSelectedQty({})} className="w-full mt-2 py-2 rounded border">Limpiar selección</button>
+            </div>
+          </aside>
         </div>
       </div>
     );
   }
 
-  // =====================
-  // PANTALLA 3: PANEL ADMIN
-  // =====================
+  // PANTALLA ADMIN
+  // mostramos formulario (agregar/editar) y la lista con opciones de editar/eliminar
+  // además mostramos, para cada regalo, quién lo seleccionó (selections)
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        margin: 0,
-        padding: '40px 16px',
-        background:
-          'radial-gradient(circle at top, #f97316 0, #0f172a 45%, #020617 100%)',
-        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
-        color: '#e5e7eb',
-        display: 'flex',
-        justifyContent: 'center'
-      }}
-    >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: 1100,
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 380px) minmax(0, 1fr)',
-          gap: 24
-        }}
-      >
-        {/* Panel izquierdo: formulario */}
-        <div
-          style={{
-            background: 'rgba(15,23,42,0.95)',
-            borderRadius: 16,
-            padding: 24,
-            boxShadow:
-              '0 20px 40px rgba(15,23,42,0.7), 0 0 0 1px rgba(148,163,184,0.2)',
-            backdropFilter: 'blur(14px)',
-            height: 'fit-content'
-          }}
-        >
-          <h1
-            style={{
-              fontSize: 24,
-              marginBottom: 4,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8
-            }}
-          >
-            🎄 Lista de Regalos
-          </h1>
-          <p
-            style={{
-              fontSize: 14,
-              color: '#9ca3af',
-              marginBottom: 20
-            }}
-          >
-            Agrega nuevos regalos a tu lista y márcalos como VIP para destacarlos.
-          </p>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div>
-              <label
-                style={{
-                  display: 'block',
-                  fontSize: 13,
-                  marginBottom: 4,
-                  color: '#e5e7eb'
-                }}
-              >
-                Nombre del regalo
+    <div className="min-h-screen p-8 bg-gradient-to-b from-orange-400 via-slate-900 to-black text-white">
+      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-1 bg-slate-900/95 rounded-lg p-4">
+          <h2 className="text-xl mb-2">Formulario de regalo</h2>
+          <div className="space-y-2">
+            <input className="w-full p-2 rounded bg-slate-800" placeholder="Nombre" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+            <input className="w-full p-2 rounded bg-slate-800" placeholder="URL imagen" value={form.image} onChange={e => setForm(f => ({ ...f, image: e.target.value }))} />
+            <input className="w-full p-2 rounded bg-slate-800" placeholder="Categoría" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} />
+            <input className="w-full p-2 rounded bg-slate-800" placeholder="Precio" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} />
+            <textarea className="w-full p-2 rounded bg-slate-800" placeholder="Detalles" value={form.details} onChange={e => setForm(f => ({ ...f, details: e.target.value }))} />
+            <input className="w-full p-2 rounded bg-slate-800" placeholder="Link compra" value={form.buyurl} onChange={e => setForm(f => ({ ...f, buyurl: e.target.value }))} />
+            <div className="flex gap-2">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={form.isVip} onChange={e => setForm(f => ({ ...f, isVip: e.target.checked }))} /> Mostrar en VIP
               </label>
-              <input
-                placeholder="Ej: PlayStation 5"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '9px 11px',
-                  borderRadius: 10,
-                  border: '1px solid #4b5563',
-                  background: '#020617',
-                  color: '#e5e7eb',
-                  fontSize: 14,
-                  outline: 'none',
-                  boxSizing: 'border-box'
-                }}
-              />
-            </div>
-
-            <div>
-              <label
-                style={{
-                  display: 'block',
-                  fontSize: 13,
-                  marginBottom: 4,
-                  color: '#e5e7eb'
-                }}
-              >
-                URL de la imagen
+              <label className="flex items-center gap-2 ml-auto">
+                <span>Disponibles</span>
+                <input type="number" min={0} className="w-20 p-1 rounded bg-slate-800" value={form.available_count} onChange={e => setForm(f => ({ ...f, available_count: Number(e.target.value) }))} />
               </label>
-              <input
-                placeholder="https://..."
-                value={image}
-                onChange={e => setImage(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '9px 11px',
-                  borderRadius: 10,
-                  border: '1px solid #4b5563',
-                  background: '#020617',
-                  color: '#e5e7eb',
-                  fontSize: 14,
-                  outline: 'none',
-                  boxSizing: 'border-box'
-                }}
-              />
             </div>
 
-            <div style={{ display: 'flex', gap: 10 }}>
-              <div style={{ flex: 1 }}>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: 13,
-                    marginBottom: 4,
-                    color: '#e5e7eb'
-                  }}
-                >
-                  Categoría
-                </label>
-                <input
-                  placeholder="Tecnología, Hogar..."
-                  value={category}
-                  onChange={e => setCategory(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '9px 11px',
-                    borderRadius: 10,
-                    border: '1px solid #4b5563',
-                    background: '#020617',
-                    color: '#e5e7eb',
-                    fontSize: 14,
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              <div style={{ width: 120 }}>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: 13,
-                    marginBottom: 4,
-                    color: '#e5e7eb'
-                  }}
-                >
-                  Precio
-                </label>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    borderRadius: 10,
-                    border: '1px solid #4b5563',
-                    background: '#020617',
-                    paddingLeft: 8
-                  }}
-                >
-                  <span
-                    style={{
-                      color: '#9ca3af',
-                      fontSize: 13,
-                      marginRight: 4
-                    }}
-                  >
-                    $
-                  </span>
-                  <input
-                    type="number"
-                    placeholder="0"
-                    value={price}
-                    onChange={e => setPrice(e.target.value)}
-                    style={{
-                      flex: 1,
-                      border: 'none',
-                      outline: 'none',
-                      background: 'transparent',
-                      color: '#e5e7eb',
-                      padding: '8px 8px 8px 0',
-                      fontSize: 14
-                    }}
-                  />
-                </div>
-              </div>
+            <div className="flex gap-2">
+              {form.id ? (
+                <>
+                  <button onClick={updateGift} className="flex-1 py-2 rounded bg-yellow-500 text-black">Guardar cambios</button>
+                  <button onClick={() => setForm({ id: null, name: '', image: '', category: '', details: '', buyurl: '', price: '', isVip: false, available_count: 1 })} className="flex-1 py-2 rounded border">Cancelar</button>
+                </>
+              ) : (
+                <button onClick={addGift} className="w-full py-2 rounded bg-gradient-to-r from-orange-500 to-pink-500">Agregar regalo</button>
+              )}
             </div>
 
-            <div>
-              <label
-                style={{
-                  display: 'block',
-                  fontSize: 13,
-                  marginBottom: 4,
-                  color: '#e5e7eb'
-                }}
-              >
-                Descripción
-              </label>
-              <textarea
-                placeholder="Detalles, color, tamaño, versiones, etc."
-                value={details}
-                onChange={e => setDetails(e.target.value)}
-                rows={3}
-                style={{
-                  width: '100%',
-                  padding: '9px 11px',
-                  borderRadius: 10,
-                  border: '1px solid #4b5563',
-                  background: '#020617',
-                  color: '#e5e7eb',
-                  fontSize: 14,
-                  resize: 'vertical',
-                  outline: 'none',
-                  boxSizing: 'border-box'
-                }}
-              />
-            </div>
-
-            <div>
-              <label
-                style={{
-                  display: 'block',
-                  fontSize: 13,
-                  marginBottom: 4,
-                  color: '#e5e7eb'
-                }}
-              >
-                Link de compra
-              </label>
-              <input
-                placeholder="https://tienda.com/producto"
-                value={buyurl}
-                onChange={e => setBuyurl(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '9px 11px',
-                  borderRadius: 10,
-                  border: '1px solid #4b5563',
-                  background: '#020617',
-                  color: '#e5e7eb',
-                  fontSize: 14,
-                  outline: 'none',
-                  boxSizing: 'border-box'
-                }}
-              />
-            </div>
-
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                marginTop: 4,
-                fontSize: 14,
-                color: '#fbbf24',
-                cursor: 'pointer',
-                userSelect: 'none'
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={showInVip}
-                onChange={e => setShowInVip(e.target.checked)}
-                style={{
-                  width: 16,
-                  height: 16,
-                  accentColor: '#f97316',
-                  cursor: 'pointer'
-                }}
-              />
-              Mostrar en zona VIP 👑
-            </label>
-
-            <button
-              onClick={addGift}
-              style={{
-                marginTop: 6,
-                width: '100%',
-                padding: '10px 14px',
-                borderRadius: 999,
-                border: 'none',
-                background:
-                  'linear-gradient(135deg, #f97316, #ec4899, #6366f1)',
-                color: '#f9fafb',
-                fontWeight: 600,
-                fontSize: 15,
-                cursor: 'pointer',
-                boxShadow: '0 12px 30px rgba(249,115,22,0.55)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                transition: 'transform 0.1s ease'
-              }}
-              onMouseDown={e => {
-                e.currentTarget.style.transform = 'translateY(1px) scale(0.99)';
-              }}
-              onMouseUp={e => {
-                e.currentTarget.style.transform = 'translateY(0) scale(1)';
-              }}
-            >
-              🎁 Agregar regalo
-            </button>
-
-            <button
-              onClick={() => {
-                setCurrentStep('name');
-              }}
-              style={{
-                marginTop: 8,
-                width: '100%',
-                padding: '8px 14px',
-                borderRadius: 10,
-                border: '1px solid rgba(148,163,184,0.3)',
-                background: 'rgba(15,23,42,0.6)',
-                color: '#9ca3af',
-                fontWeight: 500,
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = 'rgba(148,163,184,0.1)';
-                e.currentTarget.style.color = '#e5e7eb';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = 'rgba(15,23,42,0.6)';
-                e.currentTarget.style.color = '#9ca3af';
-              }}
-            >
-              ← Volver al inicio
-            </button>
+            <button onClick={() => { setCurrentStep('name'); }} className="w-full mt-2 py-2 rounded border">← Volver</button>
           </div>
         </div>
 
-        {/* Panel derecho: listas */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          {/* VIP */}
-          <section
-            style={{
-              background:
-                'linear-gradient(135deg, rgba(250,204,21,0.12), rgba(15,23,42,0.95))',
-              borderRadius: 16,
-              padding: 18,
-              border: '1px solid rgba(250,204,21,0.3)',
-              boxShadow: '0 18px 30px rgba(15,23,42,0.65)'
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 10
-              }}
-            >
-              <h2
-                style={{
-                  fontSize: 18,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6
-                }}
-              >
-                👑 Zona VIP
-              </h2>
-              <span
-                style={{
-                  fontSize: 12,
-                  padding: '2px 8px',
-                  borderRadius: 999,
-                  background: 'rgba(250,204,21,0.16)',
-                  color: '#facc15'
-                }}
-              >
-                {vipGifts.length} regalos
-              </span>
+        <div className="lg:col-span-2 space-y-4">
+          <section className="bg-slate-900/95 rounded-lg p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-lg">Zona VIP ({vipGifts.length})</h3>
             </div>
 
-            {vipGifts.length === 0 && (
-              <p
-                style={{
-                  fontSize: 13,
-                  color: '#e5e7eb'
-                }}
-              >
-                Todavía no hay regalos VIP. Marca alguno como VIP al crearlo.
-              </p>
-            )}
-
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-                gap: 10
-              }}
-            >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {vipGifts.map(g => (
-                <article
-                  key={g.id}
-                  style={{
-                    background: 'rgba(15,23,42,0.95)',
-                    borderRadius: 12,
-                    padding: 10,
-                    border: '1px solid rgba(250,204,21,0.35)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 4
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8
-                    }}
-                  >
-                    {g.image && (
-                      <img
-                        src={g.image}
-                        alt={g.name}
-                        style={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: 10,
-                          objectFit: 'cover',
-                          border: '1px solid rgba(250,204,21,0.5)'
-                        }}
-                      />
-                    )}
-                    <div style={{ minWidth: 0 }}>
-                      <h3
-                        style={{
-                          fontSize: 14,
-                          fontWeight: 600,
-                          color: '#fef9c3',
-                          marginBottom: 2,
-                          whiteSpace: 'nowrap',
-                          textOverflow: 'ellipsis',
-                          overflow: 'hidden'
-                        }}
-                      >
-                        {g.name}
-                      </h3>
-                      {g.category && (
-                        <span
-                          style={{
-                            fontSize: 11,
-                            color: '#e5e7eb',
-                            opacity: 0.85
-                          }}
-                        >
-                          {g.category}
-                        </span>
-                      )}
+                <div key={g.id} className="p-3 rounded bg-slate-800/70 border">
+                  <div className="flex items-start gap-3">
+                    {g.image && <img src={g.image} className="w-16 h-16 object-cover rounded" />}
+                    <div style={{flex:1}}>
+                      <div className="font-semibold">{g.name}</div>
+                      <div className="text-sm text-slate-300">{g.category} — Precio: ${g.price}</div>
+                      <div className="text-sm text-slate-300">Disponibles: {g.available_count} — Seleccionados: {reservedCountFor(g.id)}</div>
+
+                      <div className="flex gap-2 mt-2">
+                        <button onClick={() => editGift(g)} className="py-1 px-2 rounded border">Editar</button>
+                        <button onClick={() => deleteGift(g.id)} className="py-1 px-2 rounded bg-red-600">Eliminar</button>
+                        <div className="ml-auto text-sm">ID: {g.id}</div>
+                      </div>
+
+                      {/* Quién seleccionó este regalo */}
+                      <div className="mt-3 text-sm">
+                        <strong>Seleccionado por:</strong>
+                        <ul className="list-disc ml-5 mt-1">
+                          {selections.filter(s => s.giftId === g.id).length === 0 && <li className="text-slate-400">Nadie aun</li>}
+                          {selections.filter(s => s.giftId === g.id).map(s => (
+                            <li key={s.id}>{s.userName} — cantidad: {s.qty} — {new Date(s.createdAt).toLocaleString()}</li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
                   </div>
-                  {g.price && (
-                    <span
-                      style={{
-                        fontSize: 13,
-                        color: '#facc15',
-                        marginTop: 2
-                      }}
-                    >
-                      ${g.price}
-                    </span>
-                  )}
-                </article>
+                </div>
               ))}
             </div>
           </section>
 
-          {/* Normales */}
-          <section
-            style={{
-              background: 'rgba(15,23,42,0.96)',
-              borderRadius: 16,
-              padding: 18,
-              border: '1px solid rgba(148,163,184,0.4)',
-              boxShadow: '0 18px 30px rgba(15,23,42,0.7)',
-              flex: 1,
-              minHeight: 0
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 10
-              }}
-            >
-              <h2
-                style={{
-                  fontSize: 18,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6
-                }}
-              >
-                🎁 Regalos normales
-              </h2>
-              <span
-                style={{
-                  fontSize: 12,
-                  padding: '2px 8px',
-                  borderRadius: 999,
-                  background: 'rgba(148,163,184,0.2)',
-                  color: '#e5e7eb'
-                }}
-              >
-                {normalGifts.length} regalos
-              </span>
+          <section className="bg-slate-900/95 rounded-lg p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-lg">Regalos normales ({normalGifts.length})</h3>
             </div>
 
-            {normalGifts.length === 0 && (
-              <p
-                style={{
-                  fontSize: 13,
-                  color: '#9ca3af'
-                }}
-              >
-                Empieza agregando tu primer regalo en el formulario de la izquierda.
-              </p>
-            )}
-
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-                gap: 10
-              }}
-            >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {normalGifts.map(g => (
-                <article
-                  key={g.id}
-                  style={{
-                    background: 'rgba(15,23,42,0.98)',
-                    borderRadius: 12,
-                    padding: 10,
-                    border: '1px solid rgba(31,41,55,1)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 6
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8
-                    }}
-                  >
-                    {g.image && (
-                      <img
-                        src={g.image}
-                        alt={g.name}
-                        style={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: 10,
-                          objectFit: 'cover',
-                          border: '1px solid rgba(31,41,55,1)'
-                        }}
-                      />
-                    )}
-                    <div style={{ minWidth: 0 }}>
-                      <h3
-                        style={{
-                          fontSize: 14,
-                          fontWeight: 500,
-                          color: '#f9fafb',
-                          marginBottom: 2,
-                          whiteSpace: 'nowrap',
-                          textOverflow: 'ellipsis',
-                          overflow: 'hidden'
-                        }}
-                      >
-                        {g.name}
-                      </h3>
-                      {g.category && (
-                        <span
-                          style={{
-                            fontSize: 11,
-                            color: '#9ca3af'
-                          }}
-                        >
-                          {g.category}
-                        </span>
-                      )}
+                <div key={g.id} className="p-3 rounded bg-slate-800/70 border">
+                  <div className="flex items-start gap-3">
+                    {g.image && <img src={g.image} className="w-16 h-16 object-cover rounded" />}
+                    <div style={{flex:1}}>
+                      <div className="font-semibold">{g.name}</div>
+                      <div className="text-sm text-slate-300">{g.category} — Precio: ${g.price}</div>
+                      <div className="text-sm text-slate-300">Disponibles: {g.available_count} — Seleccionados: {reservedCountFor(g.id)}</div>
+
+                      <div className="flex gap-2 mt-2">
+                        <button onClick={() => editGift(g)} className="py-1 px-2 rounded border">Editar</button>
+                        <button onClick={() => deleteGift(g.id)} className="py-1 px-2 rounded bg-red-600">Eliminar</button>
+                        <div className="ml-auto text-sm">ID: {g.id}</div>
+                      </div>
+
+                      <div className="mt-3 text-sm">
+                        <strong>Seleccionado por:</strong>
+                        <ul className="list-disc ml-5 mt-1">
+                          {selections.filter(s => s.giftId === g.id).length === 0 && <li className="text-slate-400">Nadie aun</li>}
+                          {selections.filter(s => s.giftId === g.id).map(s => (
+                            <li key={s.id}>{s.userName} — cantidad: {s.qty} — {new Date(s.createdAt).toLocaleString()}</li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
                   </div>
-
-                  {g.price && (
-                    <span
-                      style={{
-                        fontSize: 13,
-                        color: '#22c55e'
-                      }}
-                    >
-                      ${g.price}
-                    </span>
-                  )}
-                </article>
+                </div>
               ))}
             </div>
+
           </section>
         </div>
       </div>
     </div>
   );
 }
-
-export default App;
