@@ -4,10 +4,12 @@ const API_URL =
   import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 function App() {
-  const [currentStep, setCurrentStep] = useState('name'); // 'name', 'selection', 'admin'
+  const [currentStep, setCurrentStep] = useState('name'); // 'name', 'selection', 'admin', 'adminPassword'
   const [userName, setUserName] = useState('');
   const [gifts, setGifts] = useState([]);
   const [selectedGifts, setSelectedGifts] = useState([]);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
   // Admin form
   const [name, setName] = useState('');
@@ -17,6 +19,8 @@ function App() {
   const [buyurl, setBuyurl] = useState('');
   const [price, setPrice] = useState('');
   const [showInVip, setShowInVip] = useState(false);
+
+  const CORRECT_PASSWORD = 'Juanchoesgey';
 
   // =====================
   // Cargar regalos
@@ -30,6 +34,20 @@ function App() {
   useEffect(() => {
     loadGifts();
   }, []);
+
+  // =====================
+  // Validar contraseña
+  // =====================
+  const handlePasswordSubmit = () => {
+    if (adminPassword === CORRECT_PASSWORD) {
+      setCurrentStep('admin');
+      setAdminPassword('');
+      setPasswordError('');
+    } else {
+      setPasswordError('❌ Contraseña incorrecta');
+      setAdminPassword('');
+    }
+  };
 
   // =====================
   // Agregar regalo
@@ -195,7 +213,7 @@ function App() {
           </button>
 
           <button
-            onClick={() => setCurrentStep('admin')}
+            onClick={() => setCurrentStep('adminPassword')}
             style={{
               marginTop: 20,
               width: '100%',
@@ -219,6 +237,163 @@ function App() {
             }}
           >
             Panel Admin ⚙️
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // =====================
+  // PANTALLA 1.5: CONTRASEÑA ADMIN
+  // =====================
+  if (currentStep === 'adminPassword') {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background:
+            'radial-gradient(circle at top, #f97316 0, #0f172a 45%, #020617 100%)',
+          padding: 16,
+          fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
+        }}
+      >
+        <div
+          style={{
+            width: '100%',
+            maxWidth: 420,
+            background: 'rgba(15,23,42,0.95)',
+            borderRadius: 20,
+            padding: 40,
+            boxShadow:
+              '0 20px 40px rgba(15,23,42,0.7), 0 0 0 1px rgba(148,163,184,0.2)',
+            backdropFilter: 'blur(14px)',
+            textAlign: 'center'
+          }}
+        >
+          <h1
+            style={{
+              fontSize: 32,
+              marginBottom: 8,
+              color: '#f9fafb'
+            }}
+          >
+            🔐 Panel Admin
+          </h1>
+
+          <p
+            style={{
+              fontSize: 15,
+              color: '#9ca3af',
+              marginBottom: 32
+            }}
+          >
+            ¿QUE BUSCAS? 🤔
+          </p>
+
+          <div
+            style={{
+              marginBottom: 20
+            }}
+          >
+            <input
+              type="password"
+              placeholder="Contraseña"
+              value={adminPassword}
+              onChange={e => {
+                setAdminPassword(e.target.value);
+                setPasswordError('');
+              }}
+              onKeyPress={e => {
+                if (e.key === 'Enter') {
+                  handlePasswordSubmit();
+                }
+              }}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: 12,
+                border: passwordError ? '2px solid #ef4444' : '1px solid #4b5563',
+                background: '#020617',
+                color: '#e5e7eb',
+                fontSize: 16,
+                outline: 'none',
+                boxSizing: 'border-box',
+                transition: 'border-color 0.2s'
+              }}
+            />
+
+            {passwordError && (
+              <p
+                style={{
+                  color: '#ef4444',
+                  fontSize: 13,
+                  marginTop: 8,
+                  margin: '8px 0 0 0'
+                }}
+              >
+                {passwordError}
+              </p>
+            )}
+          </div>
+
+          <button
+            onClick={handlePasswordSubmit}
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              borderRadius: 999,
+              border: 'none',
+              background:
+                'linear-gradient(135deg, #f97316, #ec4899, #6366f1)',
+              color: '#f9fafb',
+              fontWeight: 600,
+              fontSize: 16,
+              cursor: 'pointer',
+              boxShadow: '0 12px 30px rgba(249,115,22,0.55)',
+              transition: 'transform 0.1s ease'
+            }}
+            onMouseDown={e => {
+              e.currentTarget.style.transform = 'translateY(1px) scale(0.99)';
+            }}
+            onMouseUp={e => {
+              e.currentTarget.style.transform = 'translateY(0) scale(1)';
+            }}
+          >
+            Acceder →
+          </button>
+
+          <button
+            onClick={() => {
+              setCurrentStep('name');
+              setAdminPassword('');
+              setPasswordError('');
+            }}
+            style={{
+              marginTop: 20,
+              width: '100%',
+              padding: '10px 16px',
+              borderRadius: 10,
+              border: '1px solid rgba(148,163,184,0.3)',
+              background: 'rgba(15,23,42,0.6)',
+              color: '#9ca3af',
+              fontWeight: 500,
+              fontSize: 14,
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(148,163,184,0.1)';
+              e.currentTarget.style.color = '#e5e7eb';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(15,23,42,0.6)';
+              e.currentTarget.style.color = '#9ca3af';
+            }}
+          >
+            ← Volver
           </button>
         </div>
       </div>
@@ -1193,7 +1368,9 @@ function App() {
             </button>
 
             <button
-              onClick={() => setCurrentStep('name')}
+              onClick={() => {
+                setCurrentStep('name');
+              }}
               style={{
                 marginTop: 8,
                 width: '100%',
