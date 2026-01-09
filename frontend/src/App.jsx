@@ -61,8 +61,16 @@ function App() {
   }, []);
 
   // =====================
-  // HELPERS (LOGICA NEUTRAL)
+  // HELPERS
   // =====================
+  const getGiftSelectionCount = (giftId) => {
+    return selections.filter(s => s.gift_id === giftId).reduce((sum, s) => sum + s.quantity, 0);
+  };
+
+  const getGiftSelectionInfo = (giftId) => {
+    return selections.filter(s => s.gift_id === giftId);
+  };
+
   const remainingCount = () => {
     return Infinity;
   };
@@ -108,7 +116,7 @@ function App() {
     setBuyurl(gift.buyurl || '');
     setPrice(gift.price || '');
     setShowInVip(gift.is_vip ?? false);
-    setAvailableCount(1);
+    setAvailableCount(gift.available_count || 1);
   };
 
   const saveGift = async () => {
@@ -128,7 +136,7 @@ function App() {
       buyurl,
       price: Number(price) || 0,
       isVip: showInVip,
-      availableCount
+      availableCount: Number(availableCount) || 1
     };
 
     try {
@@ -583,6 +591,9 @@ function App() {
                   >
                     {listToShow.map(g => {
                       const selected = selectedGifts.includes(g.id);
+                      const selectionCount = getGiftSelectionCount(g.id);
+                      const selectionInfo = getGiftSelectionInfo(g.id);
+                      
                       return (
                         <div
                           key={g.id}
@@ -634,10 +645,40 @@ function App() {
                               style={{
                                 fontSize: 12,
                                 color: '#22c55e',
-                                fontWeight: 600
+                                fontWeight: 600,
+                                marginBottom: 4
                               }}
                             >
-                              ✅ Seleccionado
+                              ✅ Seleccionado por ti
+                            </div>
+                          )}
+
+                          {selectionCount > 0 && !selected && (
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: '#fbbf24',
+                                fontWeight: 600,
+                                marginBottom: 4
+                              }}
+                            >
+                              ⚠️ {selectionCount} seleccionado{selectionCount > 1 ? 's' : ''}
+                            </div>
+                          )}
+
+                          {selectionInfo.length > 0 && !selected && (
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: '#9ca3af',
+                                marginTop: 4,
+                                borderTop: '1px solid rgba(148,163,184,0.2)',
+                                paddingTop: 4
+                              }}
+                            >
+                              {selectionInfo.map((s, idx) => (
+                                <div key={idx}>👤 {s.username}</div>
+                              ))}
                             </div>
                           )}
                         </div>
@@ -819,6 +860,20 @@ function App() {
                 color: '#e5e7eb'
               }}
             />
+            <input
+              type="number"
+              value={availableCount}
+              onChange={e => setAvailableCount(e.target.value)}
+              placeholder="Cantidad disponible"
+              min="1"
+              style={{
+                padding: 8,
+                borderRadius: 8,
+                border: '1px solid #4b5563',
+                background: '#020617',
+                color: '#e5e7eb'
+              }}
+            />
           </div>
 
           <label
@@ -883,85 +938,90 @@ function App() {
         {gifts.length === 0 ? (
           <p style={{ color: '#9ca3af' }}>No hay regalos aún. Crea uno arriba.</p>
         ) : (
-          gifts.map(g => (
-            <div
-              key={g.id}
-              style={{
-                padding: 12,
-                border: '1px solid rgba(148,163,184,0.3)',
-                borderRadius: 10,
-                marginBottom: 10,
-                background: 'rgba(15,23,42,0.9)'
-              }}
-            >
+          gifts.map(g => {
+            const selectionInfo = getGiftSelectionInfo(g.id);
+            const totalSelected = getGiftSelectionCount(g.id);
+            
+            return (
               <div
+                key={g.id}
                 style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: 8,
-                  flexWrap: 'wrap'
+                  padding: 12,
+                  border: '1px solid rgba(148,163,184,0.3)',
+                  borderRadius: 10,
+                  marginBottom: 10,
+                  background: 'rgba(15,23,42,0.9)'
                 }}
               >
-                <div>
-                  <strong>
-                    {g.details}{' '}
-                    {g.is_vip ? '👑' : ''}
-                  </strong>
-                  <div style={{ fontSize: 12, color: '#9ca3af' }}>
-                    ID: {g.id}
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 8,
+                    flexWrap: 'wrap',
+                    marginBottom: 8
+                  }}
+                >
+                  <div>
+                    <strong>
+                      {g.details}{' '}
+                      {g.is_vip ? '👑' : ''}
+                    </strong>
+                    <div style={{ fontSize: 12, color: '#9ca3af' }}>
+                      ID: {g.id} | Stock: {g.available_count} | Seleccionados: <span style={{ color: '#fbbf24' }}>{totalSelected}</span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={() => fillFormFromGift(g)}
+                      style={{
+                        background: '#3b82f6',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 6,
+                        padding: '4px 8px',
+                        cursor: 'pointer',
+                        fontSize: 12
+                      }}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      onClick={() => deleteGift(g.id)}
+                      style={{
+                        background: '#ef4444',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 6,
+                        padding: '4px 8px',
+                        cursor: 'pointer',
+                        fontSize: 12
+                      }}
+                    >
+                      Eliminar
+                    </button>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    onClick={() => fillFormFromGift(g)}
-                    style={{
-                      background: '#3b82f6',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: 6,
-                      padding: '4px 8px',
-                      cursor: 'pointer',
-                      fontSize: 12
-                    }}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    onClick={() => deleteGift(g.id)}
-                    style={{
-                      background: '#ef4444',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: 6,
-                      padding: '4px 8px',
-                      cursor: 'pointer',
-                      fontSize: 12
-                    }}
-                  >
-                    Eliminar
-                  </button>
+                <div style={{ fontSize: 12 }}>
+                  <strong>Seleccionado por:</strong>
+                  <ul style={{ marginTop: 4, marginBottom: 0 }}>
+                    {selectionInfo.length === 0 ? (
+                      <li style={{ color: '#9ca3af' }}>Nadie todavía</li>
+                    ) : (
+                      selectionInfo.map(s => (
+                        <li key={s.id}>
+                          👤 <strong>{s.username}</strong> (cantidad: {s.quantity})
+                        </li>
+                      ))
+                    )}
+                  </ul>
                 </div>
               </div>
-
-              <div style={{ fontSize: 12, marginTop: 6 }}>
-                Seleccionado por:
-                <ul style={{ marginTop: 4 }}>
-                  {selections
-                    .filter(s => s.gift_id === g.id)
-                    .map(s => (
-                      <li key={s.id}>
-                        <strong>{s.username}</strong> ({s.quantity})
-                      </li>
-                    ))}
-                  {selections.filter(s => s.gift_id === g.id).length === 0 && (
-                    <li style={{ color: '#9ca3af' }}>Nadie todavía</li>
-                  )}
-                </ul>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
