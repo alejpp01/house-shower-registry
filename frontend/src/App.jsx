@@ -598,15 +598,32 @@ function App() {
                             padding: 12,
                             cursor: 'pointer',
                             position: 'relative',
-                            transition: 'all 0.2s ease'
+                            transition: 'all 0.2s ease',
+                            display: 'flex',
+                            flexDirection: 'column'
                           }}
                         >
+                          {g.image && (
+                            <img
+                              src={g.image}
+                              alt={g.details}
+                              style={{
+                                width: '100%',
+                                height: 120,
+                                objectFit: 'cover',
+                                borderRadius: 10,
+                                marginBottom: 8
+                              }}
+                            />
+                          )}
+
                           <h3
                             style={{
                               fontSize: 13,
                               color: '#e5e7eb',
                               margin: 0,
-                              marginBottom: 4
+                              marginBottom: 4,
+                              flex: 1
                             }}
                           >
                             {g.details}
