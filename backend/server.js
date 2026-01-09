@@ -38,7 +38,7 @@ app.get('/api/gifts', async (req, res) => {
       `SELECT *
        FROM gifts
        WHERE active = true
-       ORDER BY createdat DESC`
+       ORDER BY created_at DESC`
     );
     res.json(result.rows);
   } catch (err) {
@@ -48,7 +48,7 @@ app.get('/api/gifts', async (req, res) => {
 });
 
 // =====================
-// POST crear regalo (CORREGIDO)
+// POST crear regalo
 // =====================
 app.post('/api/gifts', async (req, res) => {
   const {
@@ -58,7 +58,8 @@ app.post('/api/gifts', async (req, res) => {
     details,
     buyurl,
     price,
-    isVip
+    isVip,
+    availableCount
   } = req.body;
 
   console.log('📥 POST /api/gifts - Body:', req.body);
@@ -70,8 +71,8 @@ app.post('/api/gifts', async (req, res) => {
   try {
     const result = await pool.query(
       `INSERT INTO gifts
-       (name, image, category, details, buyurl, price, is_vip, active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+       (name, image, category, details, buyurl, price, is_vip, available_count, active, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, NOW())
        RETURNING *`,
       [
         name,
@@ -80,7 +81,8 @@ app.post('/api/gifts', async (req, res) => {
         details || null,
         buyurl || null,
         Number(price) || 0,
-        Boolean(isVip)
+        Boolean(isVip),
+        Number(availableCount) || 1
       ]
     );
 
@@ -136,11 +138,8 @@ app.put('/api/gifts/:id', async (req, res) => {
       ]
     );
 
-    res.json({
-      success: true,
-      message: 'Regalo actualizado correctamente'
-    });
-
+    console.log(`✅ Regalo ${id} actualizado`);
+    res.json({ success: true });
   } catch (err) {
     console.error('❌ Error PUT /api/gifts:', err);
     res.status(500).json({ error: err.message });
@@ -167,21 +166,32 @@ app.delete('/api/gifts/:id', async (req, res) => {
 });
 
 // =====================
-// POST seleccionar regalos
+// POST confirmar selección
 // =====================
 app.post('/api/select', async (req, res) => {
   const { username, selections } = req.body;
 
+  console.log('📥 POST /api/select - Body:', req.body);
+
+  if (!username || !selections || selections.length === 0) {
+    return res.status(400).json({ error: 'Usuario y selecciones requeridas' });
+  }
+
   try {
-    for (const s of selections) {
+    // Insertar cada selección
+    for (const selection of selections) {
+      const { giftId, quantity } = selection;
+      
       await pool.query(
-        `INSERT INTO gift_selections (gift_id, username, quantity)
-         VALUES ($1, $2, $3)`,
-        [s.giftId, username, s.quantity]
+        `INSERT INTO gift_selections (username, gift_id, quantity, created_at)
+         VALUES ($1, $2, $3, NOW())`,
+        [username, giftId, quantity || 1]
       );
     }
 
-    res.sendStatus(201);
+    console.log(`✅ Selecciones guardadas para ${username}`);
+    res.status(201).json({ success: true, message: 'Selecciones guardadas' });
+
   } catch (err) {
     console.error('❌ Error POST /api/select:', err);
     res.status(500).json({ error: err.message });
@@ -194,14 +204,21 @@ app.post('/api/select', async (req, res) => {
 app.get('/api/selections', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT *
+      `SELECT 
+        id,
+        username,
+        gift_id,
+        quantity,
+        created_at
        FROM gift_selections
-       ORDER BY createdat DESC`
+       ORDER BY created_at DESC`
     );
+
+    console.log('✅ Selecciones obtenidas:', result.rows.length);
     res.json(result.rows);
   } catch (err) {
     console.error('❌ Error GET /api/selections:', err);
-    res.status(500).json({ error: 'Error obteniendo selecciones' });
+    res.status(500).json({ error: 'Error al obtener selecciones' });
   }
 });
 
@@ -209,7 +226,7 @@ app.get('/api/selections', async (req, res) => {
 // Health check
 // =====================
 app.get('/health', (req, res) => {
-  res.json({ status: 'API funcionando OK' });
+  res.json({ status: '✅ API running' });
 });
 
 // =====================

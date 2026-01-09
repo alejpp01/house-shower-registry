@@ -634,7 +634,7 @@ function App() {
                   >
                     {listToShow.map(g => {
                       const soldOut = isSoldOut(g);
-                      const selected = selectedGifts.includes(g.id);
+                      const selected = selectedGifts.includes(Number(g.id));
                       return (
                         <div
                           key={g.id}
