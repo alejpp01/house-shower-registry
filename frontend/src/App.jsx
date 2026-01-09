@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://house-shower-registry-production.up.railway.app';
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  'https://house-shower-registry-production.up.railway.app';
+
 const CORRECT_PASSWORD = 'Juanchoesgey';
 
 function App() {
@@ -13,7 +16,7 @@ function App() {
   const [adminPassword, setAdminPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
 
-  // Admin form (crear / editar)
+  // Admin form
   const [editingGiftId, setEditingGiftId] = useState(null);
   const [name, setName] = useState('');
   const [image, setImage] = useState('');
@@ -23,11 +26,11 @@ function App() {
   const [price, setPrice] = useState('');
   const [showInVip, setShowInVip] = useState(false);
   const [availableCount, setAvailableCount] = useState(1);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // pestaña de regalos (normal / vip)
-  const [giftTab, setGiftTab] = useState('normal'); // 'normal' | 'vip'
+  const [giftTab, setGiftTab] = useState('normal');
 
   // =====================
   // LOAD DATA
@@ -35,24 +38,20 @@ function App() {
   const loadGifts = async () => {
     try {
       const res = await fetch(`${API_URL}/api/gifts`);
-      if (!res.ok) throw new Error('Error al cargar regalos');
       const data = await res.json();
       setGifts(data || []);
-      setError('');
     } catch (err) {
-      console.error('❌ Error loadGifts:', err);
-      setError('Error cargando regalos');
+      console.error(err);
     }
   };
 
   const loadSelections = async () => {
     try {
       const res = await fetch(`${API_URL}/api/selections`);
-      if (!res.ok) throw new Error('Error al cargar selecciones');
       const data = await res.json();
       setSelections(data || []);
     } catch (err) {
-      console.error('❌ Error loadSelections:', err);
+      console.error(err);
     }
   };
 
@@ -62,19 +61,13 @@ function App() {
   }, []);
 
   // =====================
-  // HELPERS
+  // HELPERS (LOGICA NEUTRAL)
   // =====================
-  const takenCount = giftId =>
-    selections
-      .filter(s => s.gift_id === giftId)
-      .reduce((sum, s) => sum + s.quantity, 0);
-
-  const remainingCount = gift => {
-    const total = gift.available_count ?? gift.availableCount ?? 0;
-    return total - takenCount(gift.id);
+  const remainingCount = () => {
+    return Infinity;
   };
 
-  const isSoldOut = gift => remainingCount(gift) <= 0;
+  const isSoldOut = () => false;
 
   // =====================
   // ADMIN LOGIN
@@ -119,7 +112,6 @@ function App() {
   };
 
   const saveGift = async () => {
-    // Validación
     if (!name.trim()) {
       setError('❌ El nombre es requerido');
       return;
@@ -130,52 +122,38 @@ function App() {
 
     const payload = {
       name: name.trim(),
-      image: image.trim(),
-      category: category.trim(),
-      details: details.trim(),
-      buyurl: buyurl.trim(),
-      price: price ? parseFloat(price) : 0,
+      image,
+      category,
+      details,
+      buyurl,
+      price: Number(price) || 0,
       isVip: showInVip,
-      availableCount: parseInt(availableCount) || 1
+      availableCount
     };
 
-    console.log('📤 Enviando payload:', payload);
-
     try {
-      const url = editingGiftId 
-        ? `${API_URL}/api/gifts/${editingGiftId}` 
+      const url = editingGiftId
+        ? `${API_URL}/api/gifts/${editingGiftId}`
         : `${API_URL}/api/gifts`;
-      
+
       const method = editingGiftId ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
+      const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
-      console.log('📥 Response status:', response.status);
-
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || `Error ${response.status}`);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error);
       }
 
-      const data = await response.json();
-      console.log('📥 Response data:', data);
-
-      setError('');
       resetForm();
-      
-      // Esperar un poco y recargar
-      setTimeout(() => {
-        loadGifts();
-      }, 300);
-
+      await loadGifts();
       alert(editingGiftId ? '✅ Regalo actualizado' : '✅ Regalo agregado');
     } catch (err) {
-      console.error('❌ Error saveGift:', err);
-      setError(`❌ ${err.message}`);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -183,44 +161,21 @@ function App() {
 
   const deleteGift = async id => {
     if (!confirm('¿Eliminar regalo?')) return;
-
-    try {
-      const response = await fetch(`${API_URL}/api/gifts/${id}`, {
-        method: 'DELETE'
-      });
-
-      if (!response.ok) {
-        throw new Error('Error al eliminar');
-      }
-
-      // limpiar seleccionados locales de ese gift
-      setSelectedGifts(prev => prev.filter(gid => gid !== id));
-      
-      setTimeout(() => {
-        loadGifts();
-        loadSelections();
-      }, 300);
-
-      alert('✅ Regalo eliminado');
-    } catch (err) {
-      console.error('❌ Error deleteGift:', err);
-      alert('Error: ' + err.message);
-    }
+    await fetch(`${API_URL}/api/gifts/${id}`, { method: 'DELETE' });
+    await loadGifts();
+    await loadSelections();
   };
 
   // =====================
   // SELECCIÓN
   // =====================
   const toggleGiftSelection = gift => {
-    if (isSoldOut(gift)) {
-      alert('Este regalo ya no tiene cupos disponibles.');
-      return;
-    }
-    setSelectedGifts(prev =>
-      prev.includes(gift.id)
-        ? prev.filter(id => id !== gift.id)
-        : [...prev, gift.id]
-    );
+    setSelectedGifts(prev => {
+      if (prev.includes(gift.id)) {
+        return prev.filter(id => id !== gift.id);
+      }
+      return [...prev, gift.id];
+    });
   };
 
   const confirmSelection = async () => {
@@ -228,40 +183,33 @@ function App() {
       alert('Primero escribe tu nombre.');
       return;
     }
+
     if (selectedGifts.length === 0) {
       alert('Selecciona al menos un regalo.');
       return;
     }
 
-    try {
-      const response = await fetch(`${API_URL}/api/select`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: userName,
-          selections: selectedGifts.map(id => ({
-            giftId: id,
-            quantity: 1
-          }))
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Error al guardar selección');
-      }
-
-      setSelectedGifts([]);
-      
-      setTimeout(() => {
-        loadSelections();
-        loadGifts();
-      }, 300);
-
-      alert('✅ Selección registrada');
-    } catch (err) {
-      console.error('❌ Error confirmSelection:', err);
-      alert('Error: ' + err.message);
+    if (selectedGifts.length !== new Set(selectedGifts).size) {
+      alert('Selección inválida, intenta de nuevo.');
+      return;
     }
+
+    await fetch(`${API_URL}/api/select`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: userName,
+        selections: selectedGifts.map(id => ({
+          giftId: id,
+          quantity: 1
+        }))
+      })
+    });
+
+    setSelectedGifts([]);
+    await loadSelections();
+    await loadGifts();
+    alert('✅ Selección registrada');
   };
 
   // =====================
@@ -438,12 +386,14 @@ function App() {
                 : '1px solid #4b5563',
               background: '#020617',
               color: '#e5e7eb',
-              fontSize: 16
+              fontSize: 16,
+              marginBottom: 12,
+              boxSizing: 'border-box'
             }}
           />
 
           {passwordError && (
-            <p style={{ color: '#ef4444', marginTop: 8 }}>
+            <p style={{ color: '#ef4444', marginTop: 8, marginBottom: 12 }}>
               {passwordError}
             </p>
           )}
@@ -451,7 +401,7 @@ function App() {
           <button
             onClick={handlePasswordSubmit}
             style={{
-              marginTop: 20,
+              marginBottom: 12,
               width: '100%',
               padding: '12px 16px',
               borderRadius: 999,
@@ -474,7 +424,6 @@ function App() {
               setAdminPassword('');
             }}
             style={{
-              marginTop: 12,
               width: '100%',
               padding: '10px 16px',
               borderRadius: 10,
@@ -633,8 +582,7 @@ function App() {
                     }}
                   >
                     {listToShow.map(g => {
-                      const soldOut = isSoldOut(g);
-                      const selected = selectedGifts.includes(Number(g.id));
+                      const selected = selectedGifts.includes(g.id);
                       return (
                         <div
                           key={g.id}
@@ -643,13 +591,12 @@ function App() {
                             background: selected
                               ? 'rgba(34,197,94,0.15)'
                               : 'rgba(15,23,42,0.98)',
-                            border: soldOut
-                              ? '1px dashed rgba(148,163,184,0.6)'
+                            border: selected
+                              ? '2px solid rgba(34,197,94,0.8)'
                               : '1px solid rgba(31,41,55,1)',
                             borderRadius: 14,
                             padding: 12,
-                            cursor: soldOut ? 'not-allowed' : 'pointer',
-                            opacity: soldOut ? 0.5 : 1,
+                            cursor: 'pointer',
                             position: 'relative',
                             transition: 'all 0.2s ease'
                           }}
@@ -657,24 +604,25 @@ function App() {
                           <h3
                             style={{
                               fontSize: 13,
-                              textDecoration: soldOut
-                                ? 'line-through'
-                                : 'none',
-                              color: soldOut ? '#9ca3af' : '#e5e7eb'
+                              color: '#e5e7eb',
+                              margin: 0,
+                              marginBottom: 4
                             }}
                           >
                             {g.details}
                           </h3>
 
-                          <p
-                            style={{
-                              marginTop: 4,
-                              fontSize: 10,
-                              color: '#9ca3af'
-                            }}
-                          >
-                            Cupos: {remainingCount(g)}
-                          </p>
+                          {selected && (
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color: '#22c55e',
+                                fontWeight: 600
+                              }}
+                            >
+                              ✅ Seleccionado
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -692,13 +640,13 @@ function App() {
                 border: '1px solid rgba(148,163,184,0.2)'
               }}
             >
-              <h2 style={{ fontSize: 18 }}>✨ Mis deseos</h2>
+              <h2 style={{ fontSize: 18, marginBottom: 12 }}>✨ Mis deseos</h2>
 
-              <p style={{ fontSize: 12, color: '#9ca3af' }}>
+              <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 12 }}>
                 {selectedGifts.length} seleccionados
               </p>
 
-              <ul style={{ marginTop: 8, fontSize: 13, marginLeft: 16 }}>
+              <ul style={{ marginTop: 8, fontSize: 13, marginLeft: 16, marginBottom: 16 }}>
                 {selectedGiftDetails.map(g => (
                   <li key={g.id}>{g.details}</li>
                 ))}
@@ -707,7 +655,6 @@ function App() {
               <button
                 onClick={confirmSelection}
                 style={{
-                  marginTop: 12,
                   width: '100%',
                   padding: '10px 14px',
                   borderRadius: 10,
@@ -945,7 +892,7 @@ function App() {
                     {g.is_vip ? '👑' : ''}
                   </strong>
                   <div style={{ fontSize: 12, color: '#9ca3af' }}>
-                    Tomados: {takenCount(g.id)}
+                    ID: {g.id}
                   </div>
                 </div>
 

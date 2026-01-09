@@ -34,16 +34,28 @@ const pool = new Pool({
 // =====================
 app.get('/api/gifts', async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT *
-       FROM gifts
-       WHERE active = true
-       ORDER BY created_at DESC`
-    );
+    const result = await pool.query(`
+      SELECT
+        id,
+        name,
+        image,
+        category,
+        details,
+        buyurl,
+        price,
+        is_vip,
+        active,
+        createdat AS created_at,
+        1 AS available_count
+      FROM gifts
+      WHERE active = true
+      ORDER BY createdat DESC
+    `);
+
     res.json(result.rows);
   } catch (err) {
     console.error('❌ Error GET /api/gifts:', err);
-    res.status(500).json({ error: 'Error al obtener regalos' });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -51,18 +63,7 @@ app.get('/api/gifts', async (req, res) => {
 // POST crear regalo
 // =====================
 app.post('/api/gifts', async (req, res) => {
-  const {
-    name,
-    image,
-    category,
-    details,
-    buyurl,
-    price,
-    isVip,
-    availableCount
-  } = req.body;
-
-  console.log('📥 POST /api/gifts - Body:', req.body);
+  const { name, image, category, details, buyurl, price, isVip } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'El nombre es obligatorio' });
@@ -71,9 +72,20 @@ app.post('/api/gifts', async (req, res) => {
   try {
     const result = await pool.query(
       `INSERT INTO gifts
-       (name, image, category, details, buyurl, price, is_vip, available_count, active, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, NOW())
-       RETURNING *`,
+       (name, image, category, details, buyurl, price, is_vip, active)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,true)
+       RETURNING
+         id,
+         name,
+         image,
+         category,
+         details,
+         buyurl,
+         price,
+         is_vip,
+         active,
+         createdat AS created_at,
+         1 AS available_count`,
       [
         name,
         image || null,
@@ -81,17 +93,13 @@ app.post('/api/gifts', async (req, res) => {
         details || null,
         buyurl || null,
         Number(price) || 0,
-        Boolean(isVip),
-        Number(availableCount) || 1
+        Boolean(isVip)
       ]
     );
 
-    console.log('✅ Regalo creado:', result.rows[0]);
     res.status(201).json(result.rows[0]);
-
   } catch (err) {
-    console.error('❌ Error POST /api/gifts:', err.message);
-    console.error(err.stack);
+    console.error('❌ Error POST /api/gifts:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -101,15 +109,7 @@ app.post('/api/gifts', async (req, res) => {
 // =====================
 app.put('/api/gifts/:id', async (req, res) => {
   const { id } = req.params;
-  const {
-    name,
-    image,
-    category,
-    details,
-    buyurl,
-    price,
-    isVip
-  } = req.body;
+  const { name, image, category, details, buyurl, price, isVip } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'El nombre es obligatorio' });
@@ -138,7 +138,6 @@ app.put('/api/gifts/:id', async (req, res) => {
       ]
     );
 
-    console.log(`✅ Regalo ${id} actualizado`);
     res.json({ success: true });
   } catch (err) {
     console.error('❌ Error PUT /api/gifts:', err);
@@ -157,11 +156,10 @@ app.delete('/api/gifts/:id', async (req, res) => {
       `UPDATE gifts SET active = false WHERE id = $1`,
       [id]
     );
-    console.log(`✅ Regalo ${id} eliminado`);
     res.sendStatus(204);
   } catch (err) {
     console.error('❌ Error DELETE /api/gifts:', err);
-    res.status(500).json({ error: 'Error al eliminar regalo' });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -171,27 +169,20 @@ app.delete('/api/gifts/:id', async (req, res) => {
 app.post('/api/select', async (req, res) => {
   const { username, selections } = req.body;
 
-  console.log('📥 POST /api/select - Body:', req.body);
-
   if (!username || !selections || selections.length === 0) {
-    return res.status(400).json({ error: 'Usuario y selecciones requeridas' });
+    return res.status(400).json({ error: 'Datos incompletos' });
   }
 
   try {
-    // Insertar cada selección
-    for (const selection of selections) {
-      const { giftId, quantity } = selection;
-      
+    for (const s of selections) {
       await pool.query(
-        `INSERT INTO gift_selections (username, gift_id, quantity, created_at)
-         VALUES ($1, $2, $3, NOW())`,
-        [username, giftId, quantity || 1]
+        `INSERT INTO gift_selections (username, gift_id, quantity, createdat)
+         VALUES ($1,$2,$3,NOW())`,
+        [username, s.giftId, s.quantity || 1]
       );
     }
 
-    console.log(`✅ Selecciones guardadas para ${username}`);
-    res.status(201).json({ success: true, message: 'Selecciones guardadas' });
-
+    res.status(201).json({ success: true });
   } catch (err) {
     console.error('❌ Error POST /api/select:', err);
     res.status(500).json({ error: err.message });
@@ -203,22 +194,21 @@ app.post('/api/select', async (req, res) => {
 // =====================
 app.get('/api/selections', async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT 
+    const result = await pool.query(`
+      SELECT
         id,
         username,
         gift_id,
         quantity,
-        created_at
-       FROM gift_selections
-       ORDER BY created_at DESC`
-    );
+        createdat AS created_at
+      FROM gift_selections
+      ORDER BY createdat DESC
+    `);
 
-    console.log('✅ Selecciones obtenidas:', result.rows.length);
     res.json(result.rows);
   } catch (err) {
     console.error('❌ Error GET /api/selections:', err);
-    res.status(500).json({ error: 'Error al obtener selecciones' });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -226,7 +216,7 @@ app.get('/api/selections', async (req, res) => {
 // Health check
 // =====================
 app.get('/health', (req, res) => {
-  res.json({ status: '✅ API running' });
+  res.json({ status: 'API running OK' });
 });
 
 // =====================
