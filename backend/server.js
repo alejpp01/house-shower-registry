@@ -109,8 +109,6 @@ app.put('/api/gifts/:id', async (req, res) => {
     isVip
   } = req.body;
 
-  console.log('📥 PUT /api/gifts:', id, req.body);
-
   if (!name) {
     return res.status(400).json({ error: 'El nombre es obligatorio' });
   }
@@ -138,8 +136,10 @@ app.put('/api/gifts/:id', async (req, res) => {
       ]
     );
 
-    console.log(`✅ Regalo ${id} actualizado`);
-    res.sendStatus(204);
+    res.json({
+      success: true,
+      message: 'Regalo actualizado correctamente'
+    });
 
   } catch (err) {
     console.error('❌ Error PUT /api/gifts:', err);
