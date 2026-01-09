@@ -13,7 +13,8 @@ function App() {
   const [adminPassword, setAdminPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
 
-  // Admin form
+  // Admin form (crear / editar)
+  const [editingGiftId, setEditingGiftId] = useState(null);
   const [name, setName] = useState('');
   const [image, setImage] = useState('');
   const [category, setCategory] = useState('');
@@ -22,6 +23,9 @@ function App() {
   const [price, setPrice] = useState('');
   const [showInVip, setShowInVip] = useState(false);
   const [availableCount, setAvailableCount] = useState(1);
+
+  // pestaña de regalos (normal / vip)
+  const [giftTab, setGiftTab] = useState('normal'); // 'normal' | 'vip'
 
   // =====================
   // LOAD DATA
@@ -51,7 +55,12 @@ function App() {
       .filter(s => s.gift_id === giftId)
       .reduce((sum, s) => sum + s.quantity, 0);
 
-  const isTaken = giftId => takenCount(giftId) > 0;
+  const remainingCount = gift => {
+    const total = gift.available_count ?? gift.availableCount ?? 0;
+    return total - takenCount(gift.id);
+  };
+
+  const isSoldOut = gift => remainingCount(gift) <= 0;
 
   // =====================
   // ADMIN LOGIN
@@ -70,22 +79,8 @@ function App() {
   // =====================
   // CRUD REGALOS
   // =====================
-  const addGift = async () => {
-    await fetch(`${API_URL}/api/gifts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name,
-        image,
-        category,
-        details,
-        buyurl,
-        price,
-        isVip: showInVip,
-        availableCount
-      })
-    });
-
+  const resetForm = () => {
+    setEditingGiftId(null);
     setName('');
     setImage('');
     setCategory('');
@@ -94,7 +89,49 @@ function App() {
     setPrice('');
     setShowInVip(false);
     setAvailableCount(1);
+  };
 
+  const fillFormFromGift = gift => {
+    setEditingGiftId(gift.id);
+    setName(gift.name || '');
+    setImage(gift.image || '');
+    setCategory(gift.category || '');
+    setDetails(gift.details || '');
+    setBuyurl(gift.buyurl || '');
+    setPrice(gift.price || '');
+    setShowInVip(gift.is_vip ?? gift.isVip ?? false);
+    setAvailableCount(gift.available_count ?? gift.availableCount ?? 1);
+  };
+
+  const saveGift = async () => {
+    const payload = {
+      name,
+      image,
+      category,
+      details,
+      buyurl,
+      price,
+      isVip: showInVip,
+      availableCount: Number(availableCount) || 1
+    };
+
+    if (editingGiftId) {
+      // UPDATE
+      await fetch(`${API_URL}/api/gifts/${editingGiftId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } else {
+      // CREATE
+      await fetch(`${API_URL}/api/gifts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }
+
+    resetForm();
     loadGifts();
   };
 
@@ -105,21 +142,37 @@ function App() {
       method: 'DELETE'
     });
 
+    // limpiar seleccionados locales de ese gift
+    setSelectedGifts(prev => prev.filter(gid => gid !== id));
     loadGifts();
+    loadSelections();
   };
 
   // =====================
   // SELECCIÓN
   // =====================
-  const toggleGiftSelection = giftId => {
+  const toggleGiftSelection = gift => {
+    if (isSoldOut(gift)) {
+      alert('Este regalo ya no tiene cupos disponibles.');
+      return;
+    }
     setSelectedGifts(prev =>
-      prev.includes(giftId)
-        ? prev.filter(id => id !== giftId)
-        : [...prev, giftId]
+      prev.includes(gift.id)
+        ? prev.filter(id => id !== gift.id)
+        : [...prev, gift.id]
     );
   };
 
   const confirmSelection = async () => {
+    if (!userName.trim()) {
+      alert('Primero escribe tu nombre.');
+      return;
+    }
+    if (selectedGifts.length === 0) {
+      alert('Selecciona al menos un regalo.');
+      return;
+    }
+
     await fetch(`${API_URL}/api/select`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -141,11 +194,12 @@ function App() {
   // =====================
   // DERIVED
   // =====================
-  const vipGifts = gifts.filter(g => g.is_vip);
-  const normalGifts = gifts.filter(g => !g.is_vip);
+  const vipGifts = gifts.filter(g => g.is_vip || g.isVip);
+  const normalGifts = gifts.filter(g => !(g.is_vip || g.isVip));
   const selectedGiftDetails = gifts.filter(g =>
     selectedGifts.includes(g.id)
   );
+
   // =====================
   // PANTALLA 1: INGRESAR NOMBRE
   // =====================
@@ -338,7 +392,12 @@ function App() {
     );
   }
 
+  // =====================
+  // PANTALLA 2: SELECCIÓN
+  // =====================
   if (currentStep === 'selection') {
+    const listToShow = giftTab === 'vip' ? vipGifts : normalGifts;
+
     return (
       <div
         style={{
@@ -388,6 +447,52 @@ function App() {
             </button>
           </div>
 
+          {/* Tabs Normal / VIP */}
+          <div
+            style={{
+              display: 'flex',
+              marginBottom: 16,
+              gap: 8
+            }}
+          >
+            <button
+              onClick={() => setGiftTab('normal')}
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                borderRadius: 999,
+                border: '1px solid rgba(148,163,184,0.5)',
+                background:
+                  giftTab === 'normal'
+                    ? 'rgba(15,23,42,0.95)'
+                    : 'rgba(15,23,42,0.6)',
+                color: '#e5e7eb',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              🎁 Regalos normales
+            </button>
+            <button
+              onClick={() => setGiftTab('vip')}
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                borderRadius: 999,
+                border: '1px solid rgba(250,204,21,0.7)',
+                background:
+                  giftTab === 'vip'
+                    ? 'rgba(250,204,21,0.15)'
+                    : 'rgba(15,23,42,0.6)',
+                color: '#facc15',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              👑 Zona VIP
+            </button>
+          </div>
+
           <div
             style={{
               display: 'grid',
@@ -395,54 +500,8 @@ function App() {
               gap: 24
             }}
           >
+            {/* Lista de regalos según tab */}
             <div>
-              {/* VIP */}
-              <section
-                style={{
-                  background:
-                    'linear-gradient(135deg, rgba(250,204,21,0.12), rgba(15,23,42,0.95))',
-                  borderRadius: 16,
-                  padding: 18,
-                  border: '1px solid rgba(250,204,21,0.3)',
-                  marginBottom: 20
-                }}
-              >
-                <h2 style={{ fontSize: 18, marginBottom: 14 }}>
-                  👑 Regalos VIP
-                </h2>
-
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns:
-                      'repeat(auto-fill, minmax(160px, 1fr))',
-                    gap: 12
-                  }}
-                >
-                  {vipGifts.map(g => (
-                    <div
-                      key={g.id}
-                      onClick={() => toggleGiftSelection(g.id)}
-                      style={{
-                        background: selectedGifts.includes(g.id)
-                          ? 'rgba(250,204,21,0.2)'
-                          : 'rgba(15,23,42,0.95)',
-                        border: '1px solid rgba(250,204,21,0.3)',
-                        borderRadius: 14,
-                        padding: 12,
-                        cursor: 'pointer',
-                        position: 'relative'
-                      }}
-                    >
-                      <h3 style={{ fontSize: 13, color: '#fef9c3' }}>
-                        {g.name}
-                      </h3>
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              {/* Normales */}
               <section
                 style={{
                   background: 'rgba(15,23,42,0.96)',
@@ -452,7 +511,9 @@ function App() {
                 }}
               >
                 <h2 style={{ fontSize: 18, marginBottom: 14 }}>
-                  🎁 Regalos disponibles
+                  {giftTab === 'vip'
+                    ? '👑 Regalos VIP'
+                    : '🎁 Regalos disponibles'}
                 </h2>
 
                 <div
@@ -463,23 +524,50 @@ function App() {
                     gap: 12
                   }}
                 >
-                  {normalGifts.map(g => (
-                    <div
-                      key={g.id}
-                      onClick={() => toggleGiftSelection(g.id)}
-                      style={{
-                        background: selectedGifts.includes(g.id)
-                          ? 'rgba(34,197,94,0.15)'
-                          : 'rgba(15,23,42,0.98)',
-                        border: '1px solid rgba(31,41,55,1)',
-                        borderRadius: 14,
-                        padding: 12,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <h3 style={{ fontSize: 13 }}>{g.name}</h3>
-                    </div>
-                  ))}
+                  {listToShow.map(g => {
+                    const soldOut = isSoldOut(g);
+                    const selected = selectedGifts.includes(g.id);
+                    return (
+                      <div
+                        key={g.id}
+                        onClick={() => toggleGiftSelection(g)}
+                        style={{
+                          background: selected
+                            ? 'rgba(34,197,94,0.15)'
+                            : 'rgba(15,23,42,0.98)',
+                          border: soldOut
+                            ? '1px dashed rgba(148,163,184,0.6)'
+                            : '1px solid rgba(31,41,55,1)',
+                          borderRadius: 14,
+                          padding: 12,
+                          cursor: soldOut ? 'not-allowed' : 'pointer',
+                          opacity: soldOut ? 0.5 : 1,
+                          position: 'relative'
+                        }}
+                      >
+                        <h3
+                          style={{
+                            fontSize: 13,
+                            textDecoration: soldOut
+                              ? 'line-through'
+                              : 'none'
+                          }}
+                        >
+                          {g.name}
+                        </h3>
+
+                        <p
+                          style={{
+                            marginTop: 4,
+                            fontSize: 10,
+                            color: '#9ca3af'
+                          }}
+                        >
+                          Cupos restantes: {remainingCount(g)}
+                        </p>
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
             </div>
@@ -498,6 +586,12 @@ function App() {
               <p style={{ fontSize: 12, color: '#9ca3af' }}>
                 {selectedGifts.length} seleccionados
               </p>
+
+              <ul style={{ marginTop: 8, fontSize: 13 }}>
+                {selectedGiftDetails.map(g => (
+                  <li key={g.id}>{g.name}</li>
+                ))}
+              </ul>
 
               <button
                 onClick={confirmSelection}
@@ -536,51 +630,256 @@ function App() {
         color: '#e5e7eb'
       }}
     >
-      <h1 style={{ fontSize: 24, marginBottom: 20 }}>
-        🎄 Panel Administrador
-      </h1>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <h1 style={{ fontSize: 24, marginBottom: 20 }}>
+          🎄 Panel Administrador
+        </h1>
 
-      {gifts.map(g => (
+        {/* Form crear / editar regalo */}
         <div
-          key={g.id}
           style={{
-            padding: 12,
-            border: '1px solid rgba(148,163,184,0.3)',
-            borderRadius: 10,
-            marginBottom: 10
+            marginBottom: 24,
+            padding: 16,
+            borderRadius: 12,
+            border: '1px solid rgba(148,163,184,0.5)',
+            background: 'rgba(15,23,42,0.9)'
           }}
         >
-          <strong>{g.name}</strong>
+          <h2 style={{ fontSize: 18, marginBottom: 12 }}>
+            {editingGiftId ? '✏️ Editar regalo' : '➕ Nuevo regalo'}
+          </h2>
 
-          <button
-            onClick={() => deleteGift(g.id)}
+          <div
             style={{
-              marginLeft: 10,
-              background: '#ef4444',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 6,
-              padding: '4px 8px',
-              cursor: 'pointer'
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px,1fr))',
+              gap: 10,
+              marginBottom: 8
             }}
           >
-            Eliminar
-          </button>
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Nombre"
+              style={{
+                padding: 8,
+                borderRadius: 8,
+                border: '1px solid #4b5563',
+                background: '#020617',
+                color: '#e5e7eb'
+              }}
+            />
+            <input
+              value={image}
+              onChange={e => setImage(e.target.value)}
+              placeholder="URL imagen"
+              style={{
+                padding: 8,
+                borderRadius: 8,
+                border: '1px solid #4b5563',
+                background: '#020617',
+                color: '#e5e7eb'
+              }}
+            />
+            <input
+              value={category}
+              onChange={e => setCategory(e.target.value)}
+              placeholder="Categoría"
+              style={{
+                padding: 8,
+                borderRadius: 8,
+                border: '1px solid #4b5563',
+                background: '#020617',
+                color: '#e5e7eb'
+              }}
+            />
+            <input
+              value={price}
+              onChange={e => setPrice(e.target.value)}
+              placeholder="Precio"
+              style={{
+                padding: 8,
+                borderRadius: 8,
+                border: '1px solid #4b5563',
+                background: '#020617',
+                color: '#e5e7eb'
+              }}
+            />
+            <input
+              value={buyurl}
+              onChange={e => setBuyurl(e.target.value)}
+              placeholder="URL compra"
+              style={{
+                padding: 8,
+                borderRadius: 8,
+                border: '1px solid #4b5563',
+                background: '#020617',
+                color: '#e5e7eb'
+              }}
+            />
+            <input
+              value={details}
+              onChange={e => setDetails(e.target.value)}
+              placeholder="Detalles"
+              style={{
+                padding: 8,
+                borderRadius: 8,
+                border: '1px solid #4b5563',
+                background: '#020617',
+                color: '#e5e7eb'
+              }}
+            />
+            <input
+              type="number"
+              min={1}
+              value={availableCount}
+              onChange={e => setAvailableCount(e.target.value)}
+              placeholder="Cantidad disponible"
+              style={{
+                padding: 8,
+                borderRadius: 8,
+                border: '1px solid #4b5563',
+                background: '#020617',
+                color: '#e5e7eb'
+              }}
+            />
+          </div>
 
-          <div style={{ fontSize: 12, marginTop: 6 }}>
-            Seleccionado por:
-            <ul>
-              {selections
-                .filter(s => s.gift_id === g.id)
-                .map(s => (
-                  <li key={s.id}>
-                    {s.username} ({s.quantity})
-                  </li>
-                ))}
-            </ul>
+          <label
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 13,
+              color: '#e5e7eb',
+              marginRight: 16
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={showInVip}
+              onChange={e => setShowInVip(e.target.checked)}
+            />
+            Mostrar en zona VIP
+          </label>
+
+          <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+            <button
+              onClick={saveGift}
+              style={{
+                padding: '8px 14px',
+                borderRadius: 999,
+                border: 'none',
+                background:
+                  'linear-gradient(135deg, #22c55e, #16a34a)',
+                color: '#f9fafb',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              {editingGiftId ? 'Guardar cambios' : 'Agregar regalo'}
+            </button>
+            {editingGiftId && (
+              <button
+                onClick={resetForm}
+                style={{
+                  padding: '8px 14px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(148,163,184,0.5)',
+                  background: 'transparent',
+                  color: '#e5e7eb',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancelar edición
+              </button>
+            )}
           </div>
         </div>
-      ))}
+
+        {/* Lista de regalos + quién los escogió */}
+        {gifts.map(g => (
+          <div
+            key={g.id}
+            style={{
+              padding: 12,
+              border: '1px solid rgba(148,163,184,0.3)',
+              borderRadius: 10,
+              marginBottom: 10,
+              background: 'rgba(15,23,42,0.9)'
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 8
+              }}
+            >
+              <div>
+                <strong>
+                  {g.name}{' '}
+                  {g.is_vip || g.isVip ? '👑' : ''}
+                </strong>
+                <div style={{ fontSize: 12, color: '#9ca3af' }}>
+                  Cupos totales:{' '}
+                  {g.available_count ?? g.availableCount ?? 0} | Usados:{' '}
+                  {takenCount(g.id)} | Restantes:{' '}
+                  {remainingCount(g)}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => fillFormFromGift(g)}
+                  style={{
+                    background: '#3b82f6',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 6,
+                    padding: '4px 8px',
+                    cursor: 'pointer',
+                    fontSize: 12
+                  }}
+                >
+                  Editar
+                </button>
+                <button
+                  onClick={() => deleteGift(g.id)}
+                  style={{
+                    background: '#ef4444',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 6,
+                    padding: '4px 8px',
+                    cursor: 'pointer',
+                    fontSize: 12
+                  }}
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+
+            <div style={{ fontSize: 12, marginTop: 6 }}>
+              Seleccionado por:
+              <ul style={{ marginTop: 4 }}>
+                {selections
+                  .filter(s => s.gift_id === g.id)
+                  .map(s => (
+                    <li key={s.id}>
+                      {s.username} ({s.quantity})
+                    </li>
+                  ))}
+                {selections.filter(s => s.gift_id === g.id).length === 0 && (
+                  <li>Nadie todavía</li>
+                )}
+              </ul>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
