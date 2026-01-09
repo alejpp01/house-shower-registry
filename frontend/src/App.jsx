@@ -1,8 +1,5 @@
 import { useState, useEffect } from 'react';
 
-const API_URL =
-  import.meta.env.VITE_API_URL ||
-  'https://house-shower-registry-production.up.railway.app';
 
 const CORRECT_PASSWORD = 'Juanchoesgey';
 
@@ -16,7 +13,6 @@ function App() {
   const [adminPassword, setAdminPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
 
-  // Admin form
   const [editingGiftId, setEditingGiftId] = useState(null);
   const [name, setName] = useState('');
   const [image, setImage] = useState('');
@@ -29,35 +25,82 @@ function App() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [apiError, setApiError] = useState('');
+  const [debugInfo, setDebugInfo] = useState('');
 
   const [giftTab, setGiftTab] = useState('normal');
+
+  // =====================
+  // API HELPER
+  // =====================
+  const apiCall = async (endpoint, options = {}) => {
+    try {
+      console.log(`📡 Llamando: ${API_URL}${endpoint}`);
+      
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        ...options
+      });
+
+      console.log(`📊 Status: ${response.status}`);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`❌ Error ${response.status}:`, errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText.slice(0, 100)}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (err) {
+      console.error('❌ API Error:', err);
+      throw err;
+    }
+  };
 
   // =====================
   // LOAD DATA
   // =====================
   const loadGifts = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/gifts`);
-      const data = await res.json();
+      console.log('🔄 Cargando regalos...');
+      setDebugInfo('Cargando regalos...');
+      const data = await apiCall('/api/gifts');
+      console.log('✅ Regalos:', data);
       setGifts(data || []);
+      setApiError('');
+      setDebugInfo('');
     } catch (err) {
-      console.error(err);
+      console.error('❌ Error:', err.message);
+      setApiError(err.message);
+      setDebugInfo(`Error: ${err.message}`);
+      setGifts([]);
     }
   };
 
   const loadSelections = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/selections`);
-      const data = await res.json();
+      const data = await apiCall('/api/selections');
+      console.log('✅ Selecciones:', data);
       setSelections(data || []);
     } catch (err) {
-      console.error(err);
+      console.error('❌ Error cargando selecciones:', err);
+      setSelections([]);
     }
   };
 
   useEffect(() => {
+    console.log('🚀 App iniciando. API_URL:', API_URL);
     loadGifts();
     loadSelections();
+    
+    const interval = setInterval(() => {
+      loadSelections();
+    }, 3000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   // =====================
@@ -71,14 +114,8 @@ function App() {
     return selections.filter(s => s.gift_id === giftId);
   };
 
-  const remainingCount = () => {
-    return Infinity;
-  };
-
-  const isSoldOut = () => false;
-
   // =====================
-  // ADMIN LOGIN
+  // ADMIN
   // =====================
   const handlePasswordSubmit = () => {
     if (adminPassword === CORRECT_PASSWORD) {
@@ -91,9 +128,6 @@ function App() {
     }
   };
 
-  // =====================
-  // CRUD REGALOS
-  // =====================
   const resetForm = () => {
     setEditingGiftId(null);
     setName('');
@@ -109,9 +143,9 @@ function App() {
 
   const fillFormFromGift = gift => {
     setEditingGiftId(gift.id);
-    setName(gift.details || '');
+    setName(gift.name || '');
     setImage(gift.image || '');
-    setCategory(gift.buyurl || '');
+    setCategory(gift.category || '');
     setDetails(gift.details || '');
     setBuyurl(gift.buyurl || '');
     setPrice(gift.price || '');
@@ -140,22 +174,13 @@ function App() {
     };
 
     try {
-      const url = editingGiftId
-        ? `${API_URL}/api/gifts/${editingGiftId}`
-        : `${API_URL}/api/gifts`;
-
+      const url = editingGiftId ? `/api/gifts/${editingGiftId}` : '/api/gifts';
       const method = editingGiftId ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
+      await apiCall(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error);
-      }
 
       resetForm();
       await loadGifts();
@@ -169,9 +194,13 @@ function App() {
 
   const deleteGift = async id => {
     if (!confirm('¿Eliminar regalo?')) return;
-    await fetch(`${API_URL}/api/gifts/${id}`, { method: 'DELETE' });
-    await loadGifts();
-    await loadSelections();
+    try {
+      await apiCall(`/api/gifts/${id}`, { method: 'DELETE' });
+      await loadGifts();
+      await loadSelections();
+    } catch (err) {
+      alert(`Error: ${err.message}`);
+    }
   };
 
   // =====================
@@ -197,27 +226,25 @@ function App() {
       return;
     }
 
-    if (selectedGifts.length !== new Set(selectedGifts).size) {
-      alert('Selección inválida, intenta de nuevo.');
-      return;
+    try {
+      await apiCall('/api/select', {
+        method: 'POST',
+        body: JSON.stringify({
+          username: userName,
+          selections: selectedGifts.map(id => ({
+            giftId: id,
+            quantity: 1
+          }))
+        })
+      });
+
+      setSelectedGifts([]);
+      await loadSelections();
+      await loadGifts();
+      alert('✅ Selección registrada');
+    } catch (err) {
+      alert(`Error: ${err.message}`);
     }
-
-    await fetch(`${API_URL}/api/select`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: userName,
-        selections: selectedGifts.map(id => ({
-          giftId: id,
-          quantity: 1
-        }))
-      })
-    });
-
-    setSelectedGifts([]);
-    await loadSelections();
-    await loadGifts();
-    alert('✅ Selección registrada');
   };
 
   // =====================
@@ -225,12 +252,89 @@ function App() {
   // =====================
   const vipGifts = gifts.filter(g => g.is_vip);
   const normalGifts = gifts.filter(g => !g.is_vip);
-  const selectedGiftDetails = gifts.filter(g =>
-    selectedGifts.includes(g.id)
-  );
+  const selectedGiftDetails = gifts.filter(g => selectedGifts.includes(g.id));
 
   // =====================
-  // PANTALLA 1: INGRESAR NOMBRE
+  // ERROR SCREEN
+  // =====================
+  if (apiError && currentStep === 'name') {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'radial-gradient(circle at top, #f97316 0, #0f172a 45%, #020617 100%)',
+          padding: 16,
+          fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
+        }}
+      >
+        <div
+          style={{
+            width: '100%',
+            maxWidth: 500,
+            background: 'rgba(15,23,42,0.95)',
+            borderRadius: 20,
+            padding: 40,
+            boxShadow: '0 20px 40px rgba(15,23,42,0.7), 0 0 0 1px rgba(148,163,184,0.2)',
+            backdropFilter: 'blur(14px)',
+            textAlign: 'center'
+          }}
+        >
+          <h1 style={{ fontSize: 32, marginBottom: 8, color: '#ef4444' }}>
+            ⚠️ Error de conexión
+          </h1>
+
+          <p style={{ fontSize: 14, color: '#9ca3af', marginBottom: 16, wordBreak: 'break-word' }}>
+            {apiError}
+          </p>
+
+          <div style={{ 
+            background: 'rgba(0,0,0,0.3)', 
+            padding: 12, 
+            borderRadius: 8, 
+            marginBottom: 20,
+            textAlign: 'left',
+            fontSize: 11,
+            color: '#9ca3af',
+            fontFamily: 'monospace',
+            overflow: 'auto',
+            maxHeight: 150
+          }}>
+            <strong>API URL:</strong> {API_URL}
+            <br />
+            <strong>Estado:</strong> {debugInfo}
+          </div>
+
+          <button
+            onClick={() => {
+              setApiError('');
+              setDebugInfo('');
+              loadGifts();
+              loadSelections();
+            }}
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              borderRadius: 999,
+              border: 'none',
+              background: 'linear-gradient(135deg, #f97316, #ec4899, #6366f1)',
+              color: '#f9fafb',
+              fontWeight: 600,
+              fontSize: 16,
+              cursor: 'pointer'
+            }}
+          >
+            Reintentar →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // =====================
+  // PANTALLA 1: NOMBRE
   // =====================
   if (currentStep === 'name') {
     return (
@@ -240,8 +344,7 @@ function App() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background:
-            'radial-gradient(circle at top, #f97316 0, #0f172a 45%, #020617 100%)',
+          background: 'radial-gradient(circle at top, #f97316 0, #0f172a 45%, #020617 100%)',
           padding: 16,
           fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
         }}
@@ -253,8 +356,7 @@ function App() {
             background: 'rgba(15,23,42,0.95)',
             borderRadius: 20,
             padding: 40,
-            boxShadow:
-              '0 20px 40px rgba(15,23,42,0.7), 0 0 0 1px rgba(148,163,184,0.2)',
+            boxShadow: '0 20px 40px rgba(15,23,42,0.7), 0 0 0 1px rgba(148,163,184,0.2)',
             backdropFilter: 'blur(14px)',
             textAlign: 'center'
           }}
@@ -264,7 +366,7 @@ function App() {
           </h1>
 
           <p style={{ fontSize: 15, color: '#9ca3af', marginBottom: 32 }}>
-            Ingresa tu nombre para comenzar a seleccionar tus regalos favoritos.
+            Ingresa tu nombre para seleccionar tus regalos favoritos.
           </p>
 
           <input
@@ -301,8 +403,7 @@ function App() {
               padding: '12px 16px',
               borderRadius: 999,
               border: 'none',
-              background:
-                'linear-gradient(135deg, #f97316, #ec4899, #6366f1)',
+              background: 'linear-gradient(135deg, #f97316, #ec4899, #6366f1)',
               color: '#f9fafb',
               fontWeight: 600,
               fontSize: 16,
@@ -339,7 +440,7 @@ function App() {
   }
 
   // =====================
-  // PANTALLA 1.5: CONTRASEÑA ADMIN
+  // PANTALLA 1.5: PASSWORD
   // =====================
   if (currentStep === 'adminPassword') {
     return (
@@ -349,8 +450,7 @@ function App() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background:
-            'radial-gradient(circle at top, #f97316 0, #0f172a 45%, #020617 100%)',
+          background: 'radial-gradient(circle at top, #f97316 0, #0f172a 45%, #020617 100%)',
           padding: 16,
           fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
         }}
@@ -362,8 +462,7 @@ function App() {
             background: 'rgba(15,23,42,0.95)',
             borderRadius: 20,
             padding: 40,
-            boxShadow:
-              '0 20px 40px rgba(15,23,42,0.7), 0 0 0 1px rgba(148,163,184,0.2)',
+            boxShadow: '0 20px 40px rgba(15,23,42,0.7), 0 0 0 1px rgba(148,163,184,0.2)',
             backdropFilter: 'blur(14px)',
             textAlign: 'center'
           }}
@@ -389,9 +488,7 @@ function App() {
               width: '100%',
               padding: '12px 16px',
               borderRadius: 12,
-              border: passwordError
-                ? '2px solid #ef4444'
-                : '1px solid #4b5563',
+              border: passwordError ? '2px solid #ef4444' : '1px solid #4b5563',
               background: '#020617',
               color: '#e5e7eb',
               fontSize: 16,
@@ -414,8 +511,7 @@ function App() {
               padding: '12px 16px',
               borderRadius: 999,
               border: 'none',
-              background:
-                'linear-gradient(135deg, #f97316, #ec4899, #6366f1)',
+              background: 'linear-gradient(135deg, #f97316, #ec4899, #6366f1)',
               color: '#f9fafb',
               fontWeight: 600,
               fontSize: 16,
@@ -461,8 +557,7 @@ function App() {
         style={{
           minHeight: '100vh',
           padding: '40px 16px',
-          background:
-            'radial-gradient(circle at top, #f97316 0, #0f172a 45%, #020617 100%)',
+          background: 'radial-gradient(circle at top, #f97316 0, #0f172a 45%, #020617 100%)',
           fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
           color: '#e5e7eb'
         }}
@@ -507,7 +602,6 @@ function App() {
             </button>
           </div>
 
-          {/* Tabs Normal / VIP */}
           <div
             style={{
               display: 'flex',
@@ -522,10 +616,7 @@ function App() {
                 padding: '8px 12px',
                 borderRadius: 999,
                 border: '1px solid rgba(148,163,184,0.5)',
-                background:
-                  giftTab === 'normal'
-                    ? 'rgba(15,23,42,0.95)'
-                    : 'rgba(15,23,42,0.6)',
+                background: giftTab === 'normal' ? 'rgba(15,23,42,0.95)' : 'rgba(15,23,42,0.6)',
                 color: '#e5e7eb',
                 fontWeight: 600,
                 cursor: 'pointer'
@@ -540,10 +631,7 @@ function App() {
                 padding: '8px 12px',
                 borderRadius: 999,
                 border: '1px solid rgba(250,204,21,0.7)',
-                background:
-                  giftTab === 'vip'
-                    ? 'rgba(250,204,21,0.15)'
-                    : 'rgba(15,23,42,0.6)',
+                background: giftTab === 'vip' ? 'rgba(250,204,21,0.15)' : 'rgba(15,23,42,0.6)',
                 color: '#facc15',
                 fontWeight: 600,
                 cursor: 'pointer'
@@ -560,7 +648,6 @@ function App() {
               gap: 24
             }}
           >
-            {/* Lista de regalos según tab */}
             <div>
               <section
                 style={{
@@ -571,9 +658,7 @@ function App() {
                 }}
               >
                 <h2 style={{ fontSize: 18, marginBottom: 14 }}>
-                  {giftTab === 'vip'
-                    ? '👑 Regalos VIP'
-                    : '🎁 Regalos disponibles'}
+                  {giftTab === 'vip' ? '👑 Regalos VIP' : '🎁 Regalos disponibles'}
                 </h2>
 
                 {listToShow.length === 0 ? (
@@ -584,8 +669,7 @@ function App() {
                   <div
                     style={{
                       display: 'grid',
-                      gridTemplateColumns:
-                        'repeat(auto-fill, minmax(160px, 1fr))',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
                       gap: 12
                     }}
                   >
@@ -599,12 +683,8 @@ function App() {
                           key={g.id}
                           onClick={() => toggleGiftSelection(g)}
                           style={{
-                            background: selected
-                              ? 'rgba(34,197,94,0.15)'
-                              : 'rgba(15,23,42,0.98)',
-                            border: selected
-                              ? '2px solid rgba(34,197,94,0.8)'
-                              : '1px solid rgba(31,41,55,1)',
+                            background: selected ? 'rgba(34,197,94,0.15)' : 'rgba(15,23,42,0.98)',
+                            border: selected ? '2px solid rgba(34,197,94,0.8)' : '1px solid rgba(31,41,55,1)',
                             borderRadius: 14,
                             padding: 12,
                             cursor: 'pointer',
@@ -641,27 +721,13 @@ function App() {
                           </h3>
 
                           {selected && (
-                            <div
-                              style={{
-                                fontSize: 12,
-                                color: '#22c55e',
-                                fontWeight: 600,
-                                marginBottom: 4
-                              }}
-                            >
+                            <div style={{ fontSize: 12, color: '#22c55e', fontWeight: 600, marginBottom: 4 }}>
                               ✅ Seleccionado por ti
                             </div>
                           )}
 
                           {selectionCount > 0 && !selected && (
-                            <div
-                              style={{
-                                fontSize: 11,
-                                color: '#fbbf24',
-                                fontWeight: 600,
-                                marginBottom: 4
-                              }}
-                            >
+                            <div style={{ fontSize: 11, color: '#fbbf24', fontWeight: 600, marginBottom: 4 }}>
                               ⚠️ {selectionCount} seleccionado{selectionCount > 1 ? 's' : ''}
                             </div>
                           )}
@@ -689,7 +755,6 @@ function App() {
               </section>
             </div>
 
-            {/* Sidebar */}
             <aside
               style={{
                 background: 'rgba(15,23,42,0.95)',
@@ -717,8 +782,7 @@ function App() {
                   padding: '10px 14px',
                   borderRadius: 10,
                   border: 'none',
-                  background:
-                    'linear-gradient(135deg, #f97316, #ec4899)',
+                  background: 'linear-gradient(135deg, #f97316, #ec4899)',
                   color: '#f9fafb',
                   fontWeight: 600,
                   cursor: 'pointer'
@@ -734,24 +798,21 @@ function App() {
   }
 
   // =====================
-  // PANEL ADMIN
+  // ADMIN PANEL
   // =====================
   return (
     <div
       style={{
         minHeight: '100vh',
         padding: '40px 16px',
-        background:
-          'radial-gradient(circle at top, #f97316 0, #0f172a 45%, #020617 100%)',
+        background: 'radial-gradient(circle at top, #f97316 0, #0f172a 45%, #020617 100%)',
         fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
         color: '#e5e7eb'
       }}
     >
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h1 style={{ fontSize: 24 }}>
-            🎄 Panel Administrador
-          </h1>
+          <h1 style={{ fontSize: 24 }}>🎄 Panel Administrador</h1>
           <button
             onClick={() => {
               setCurrentStep('name');
@@ -772,7 +833,6 @@ function App() {
           </button>
         </div>
 
-        {/* Form crear / editar regalo */}
         <div
           style={{
             marginBottom: 24,
@@ -827,6 +887,30 @@ function App() {
             <input
               value={category}
               onChange={e => setCategory(e.target.value)}
+              placeholder="Categoría"
+              style={{
+                padding: 8,
+                borderRadius: 8,
+                border: '1px solid #4b5563',
+                background: '#020617',
+                color: '#e5e7eb'
+              }}
+            />
+            <input
+              value={details}
+              onChange={e => setDetails(e.target.value)}
+              placeholder="Descripción"
+              style={{
+                padding: 8,
+                borderRadius: 8,
+                border: '1px solid #4b5563',
+                background: '#020617',
+                color: '#e5e7eb'
+              }}
+            />
+            <input
+              value={buyurl}
+              onChange={e => setBuyurl(e.target.value)}
               placeholder="URL compra"
               style={{
                 padding: 8,
@@ -840,18 +924,6 @@ function App() {
               value={price}
               onChange={e => setPrice(e.target.value)}
               placeholder="Precio"
-              style={{
-                padding: 8,
-                borderRadius: 8,
-                border: '1px solid #4b5563',
-                background: '#020617',
-                color: '#e5e7eb'
-              }}
-            />
-            <input
-              value={details}
-              onChange={e => setDetails(e.target.value)}
-              placeholder="Descripción"
               style={{
                 padding: 8,
                 borderRadius: 8,
@@ -902,8 +974,7 @@ function App() {
                 padding: '8px 14px',
                 borderRadius: 999,
                 border: 'none',
-                background:
-                  'linear-gradient(135deg, #22c55e, #16a34a)',
+                background: 'linear-gradient(135deg, #22c55e, #16a34a)',
                 color: '#f9fafb',
                 fontWeight: 600,
                 cursor: loading ? 'not-allowed' : 'pointer',
@@ -930,7 +1001,6 @@ function App() {
           </div>
         </div>
 
-        {/* Lista de regalos + quién los escogió */}
         <h2 style={{ fontSize: 18, marginBottom: 12 }}>
           📋 Regalos ({gifts.length})
         </h2>
@@ -965,8 +1035,7 @@ function App() {
                 >
                   <div>
                     <strong>
-                      {g.details}{' '}
-                      {g.is_vip ? '👑' : ''}
+                      {g.details} {g.is_vip ? '👑' : ''}
                     </strong>
                     <div style={{ fontSize: 12, color: '#9ca3af' }}>
                       ID: {g.id} | Stock: {g.available_count} | Seleccionados: <span style={{ color: '#fbbf24' }}>{totalSelected}</span>

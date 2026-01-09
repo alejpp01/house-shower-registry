@@ -11,11 +11,13 @@ const app = express();
 app.use(cors({
   origin: [
     'http://localhost:5173',
-    'https://chocoro-shower-vacilao.vercel.app'
+    'https://vercel.com/alejandro-pedrozo-s-projects/chocoro-shower-vacilao',                           
+    'https://chocoro-shower-vacilao.vercel.app'                 
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
 }));
+
 
 app.use(express.json());
 
