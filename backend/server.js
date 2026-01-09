@@ -48,7 +48,7 @@ app.get('/api/gifts', async (req, res) => {
 });
 
 // =====================
-// POST crear regalo - CORREGIDO PARA COLUMNAS REALES
+// POST crear regalo (CORREGIDO)
 // =====================
 app.post('/api/gifts', async (req, res) => {
   const {
@@ -58,43 +58,44 @@ app.post('/api/gifts', async (req, res) => {
     details,
     buyurl,
     price,
-    isVip,
-    availableCount
+    isVip
   } = req.body;
 
-  console.log('📥 POST /api/gifts - Body recibido:', req.body);
+  console.log('📥 POST /api/gifts - Body:', req.body);
+
+  if (!name) {
+    return res.status(400).json({ error: 'El nombre es obligatorio' });
+  }
 
   try {
-    // Tu tabla real tiene: id, image, category, details, buyurl, price, is_vip, active, createdat
-    // Mapeo:
-    // - name → details (donde guardamos el nombre del regalo)
-    // - category → en buyurl (o crear nueva columna si necesitas)
-    // - availableCount → no existe, ignoramos o lo guardamos en otra parte
-
     const result = await pool.query(
       `INSERT INTO gifts
-       (image, details, buyurl, price, is_vip, active)
-       VALUES ($1, $2, $3, $4, $5, true)
+       (name, image, category, details, buyurl, price, is_vip, active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true)
        RETURNING *`,
       [
-        image || '',
-        name || '',  // El nombre va en "details"
-        category || buyurl || '',  // category va en buyurl si no tiene buyurl
-        parseFloat(price) || 0,
+        name,
+        image || null,
+        category || null,
+        details || null,
+        buyurl || null,
+        Number(price) || 0,
         Boolean(isVip)
       ]
     );
 
     console.log('✅ Regalo creado:', result.rows[0]);
-    res.json(result.rows[0]);
+    res.status(201).json(result.rows[0]);
+
   } catch (err) {
-    console.error('❌ Error en INSERT /api/gifts:', err);
+    console.error('❌ Error POST /api/gifts:', err.message);
+    console.error(err.stack);
     res.status(500).json({ error: err.message });
   }
 });
 
 // =====================
-// PUT editar regalo - CORREGIDO PARA COLUMNAS REALES
+// PUT editar regalo
 // =====================
 app.put('/api/gifts/:id', async (req, res) => {
   const { id } = req.params;
@@ -105,26 +106,33 @@ app.put('/api/gifts/:id', async (req, res) => {
     details,
     buyurl,
     price,
-    isVip,
-    availableCount
+    isVip
   } = req.body;
 
-  console.log('📥 PUT /api/gifts/:id - Body recibido:', req.body);
+  console.log('📥 PUT /api/gifts:', id, req.body);
+
+  if (!name) {
+    return res.status(400).json({ error: 'El nombre es obligatorio' });
+  }
 
   try {
     await pool.query(
       `UPDATE gifts SET
-        image = $1,
-        details = $2,
-        buyurl = $3,
-        price = $4,
-        is_vip = $5
-       WHERE id = $6`,
+        name = $1,
+        image = $2,
+        category = $3,
+        details = $4,
+        buyurl = $5,
+        price = $6,
+        is_vip = $7
+       WHERE id = $8`,
       [
-        image || '',
-        name || '',  // El nombre va en "details"
-        category || buyurl || '',  // category va en buyurl
-        parseFloat(price) || 0,
+        name,
+        image || null,
+        category || null,
+        details || null,
+        buyurl || null,
+        Number(price) || 0,
         Boolean(isVip),
         id
       ]
@@ -132,14 +140,15 @@ app.put('/api/gifts/:id', async (req, res) => {
 
     console.log(`✅ Regalo ${id} actualizado`);
     res.sendStatus(204);
+
   } catch (err) {
-    console.error('❌ Error en UPDATE /api/gifts:', err);
+    console.error('❌ Error PUT /api/gifts:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // =====================
-// DELETE regalo
+// DELETE regalo (soft delete)
 // =====================
 app.delete('/api/gifts/:id', async (req, res) => {
   const { id } = req.params;
@@ -149,10 +158,10 @@ app.delete('/api/gifts/:id', async (req, res) => {
       `UPDATE gifts SET active = false WHERE id = $1`,
       [id]
     );
-    console.log(`✅ Regalo ${id} eliminado (soft delete)`);
+    console.log(`✅ Regalo ${id} eliminado`);
     res.sendStatus(204);
   } catch (err) {
-    console.error('❌ Error en DELETE /api/gifts:', err);
+    console.error('❌ Error DELETE /api/gifts:', err);
     res.status(500).json({ error: 'Error al eliminar regalo' });
   }
 });
@@ -163,8 +172,6 @@ app.delete('/api/gifts/:id', async (req, res) => {
 app.post('/api/select', async (req, res) => {
   const { username, selections } = req.body;
 
-  console.log('📥 POST /api/select - Username:', username, 'Selections:', selections);
-
   try {
     for (const s of selections) {
       await pool.query(
@@ -174,16 +181,15 @@ app.post('/api/select', async (req, res) => {
       );
     }
 
-    console.log(`✅ ${selections.length} selecciones guardadas para ${username}`);
     res.sendStatus(201);
   } catch (err) {
-    console.error('❌ Error en POST /api/select:', err);
+    console.error('❌ Error POST /api/select:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // =====================
-// GET selecciones (admin)
+// GET selecciones
 // =====================
 app.get('/api/selections', async (req, res) => {
   try {
@@ -203,13 +209,13 @@ app.get('/api/selections', async (req, res) => {
 // Health check
 // =====================
 app.get('/health', (req, res) => {
-  res.json({ status: '✅ API funcionando' });
+  res.json({ status: 'API funcionando OK' });
 });
 
 // =====================
-// Iniciar servidor
+// Start server
 // =====================
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`🚀 API corriendo en http://localhost:${PORT}`);
+  console.log(`🚀 API corriendo en puerto ${PORT}`);
 });
